@@ -15,6 +15,13 @@ const CONFIG = {
   BALL_MAX_SPEED: 20
 };
 
+// ================= LANE SELECTION ==============
+let selectedLane = 3; // Default to center lane (lane 3 of 5)
+let gameStarted = false;
+let justSelectedLane = false; // Flag to prevent immediate auto-throw
+const totalLanes = 5;
+const laneSpacing = 2.2;
+
 // ================= SCENE / RENDERER ==============
 const container = document.getElementById('container');
 const scene = new THREE.Scene();
@@ -132,13 +139,191 @@ const createBowlingAlleyLights = () => {
   return lights;
 };
 
-// Initialize bowling alley lighting
-const bowlingLights = createBowlingAlleyLights();
+// ================= LANE SELECTION MODAL ==============
+function createLaneSelectionModal() {
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'laneSelectionModal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    font-family: Arial, sans-serif;
+  `;
+  
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 2px solid #60a5fa;
+    max-width: 500px;
+    width: 90%;
+  `;
+  
+  // Title
+  const title = document.createElement('h2');
+  title.textContent = '🎳 Select Your Bowling Lane';
+  title.style.cssText = `
+    color: #60a5fa;
+    margin: 0 0 30px 0;
+    font-size: 28px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  `;
+  modalContent.appendChild(title);
+  
+  // Instruction
+  const instruction = document.createElement('p');
+  instruction.textContent = 'Choose which lane you want to play on:';
+  instruction.style.cssText = `
+    color: #dbeafe;
+    margin: 0 0 25px 0;
+    font-size: 18px;
+  `;
+  modalContent.appendChild(instruction);
+  
+  // Lane buttons container
+  const buttonsContainer = document.createElement('div');
+  buttonsContainer.style.cssText = `
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  `;
+  
+  // Create lane buttons (1-5, left to right)
+  for (let i = 1; i <= totalLanes; i++) {
+    const laneButton = document.createElement('button');
+    laneButton.textContent = `Lane ${i}`;
+    laneButton.style.cssText = `
+      background: ${i === selectedLane ? 'linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)' : 'linear-gradient(90deg, #475569 0%, #64748b 100%)'};
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 15px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      min-width: 80px;
+    `;
+    
+    laneButton.addEventListener('mouseenter', () => {
+      if (i !== selectedLane) {
+        laneButton.style.background = 'linear-gradient(90deg, #64748b 0%, #475569 100%)';
+      }
+    });
+    
+    laneButton.addEventListener('mouseleave', () => {
+      if (i !== selectedLane) {
+        laneButton.style.background = 'linear-gradient(90deg, #475569 0%, #64748b 100%)';
+      }
+    });
+    
+    laneButton.addEventListener('click', () => {
+      // Update selection
+      selectedLane = i;
+      
+      // Update button styles
+      buttonsContainer.querySelectorAll('button').forEach((btn, index) => {
+        if (index + 1 === selectedLane) {
+          btn.style.background = 'linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)';
+        } else {
+          btn.style.background = 'linear-gradient(90deg, #475569 0%, #64748b 100%)';
+        }
+      });
+    });
+    
+    buttonsContainer.appendChild(laneButton);
+  }
+  
+  modalContent.appendChild(buttonsContainer);
+  
+  // Start game button
+  const startButton = document.createElement('button');
+  startButton.textContent = '🎮 Start Game';
+  startButton.style.cssText = `
+    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 15px 30px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+  `;
+  
+  startButton.addEventListener('mouseenter', () => {
+    startButton.style.background = 'linear-gradient(90deg, #059669 0%, #047857 100%)';
+    startButton.style.transform = 'scale(1.05)';
+  });
+  
+  startButton.addEventListener('mouseleave', () => {
+    startButton.style.background = 'linear-gradient(90deg, #10b981 0%, #059669 100%)';
+    startButton.style.transform = 'scale(1)';
+  });
+  
+  startButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startGameWithSelectedLane();
+    document.body.removeChild(modalOverlay);
+  });
+  
+  modalContent.appendChild(startButton);
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+}
+
+// Start game with selected lane
+function startGameWithSelectedLane() {
+  gameStarted = true;
+  justSelectedLane = true; // Prevent immediate auto-throw
+  console.log(`🎳 Starting game on Lane ${selectedLane}`);
+  
+  // Calculate lane X position (lanes numbered 1-5 from left to right)
+  const selectedLaneX = (selectedLane - Math.ceil(totalLanes / 2)) * laneSpacing;
+  
+  // Update camera position for selected lane
+  camera.position.set(selectedLaneX, 3.8, -8);
+  camera.lookAt(selectedLaneX, 1, CONFIG.PIN_BASE_Z);
+  
+  // Initialize game on selected lane
+  initializeGameOnLane(selectedLaneX);
+  
+  // Clear the flag after a short delay to allow normal interaction
+  setTimeout(() => {
+    justSelectedLane = false;
+    console.log('✅ Ready for player input');
+  }, 500);
+}
+
+// Initialize game components for selected lane
+function initializeGameOnLane(laneX) {
+  // Update CONFIG for selected lane
+  CONFIG.SELECTED_LANE_X = laneX;
+  
+  // Start the game
+  init();
+}
 
 // ================= SIMPLE CLOSED CUBE ROOM ==============
 const createSimpleCubeRoom = () => {
-  // Room dimensions - smaller cube
-  const roomSize = 30;
+  // Room dimensions - larger to accommodate multiple lanes
+  const roomSize = 40; // Increased from 30 to fit 5 lanes
   const roomHeight = 15;
   
   // Remove the dark brown floor - let the lane be the only floor surface
@@ -183,45 +368,98 @@ const createSimpleCubeRoom = () => {
   scene.add(rightWall);
 };
 
-// Create single bowling lane
-const createSingleLane = () => {
+// Create multiple bowling lanes
+const createMultipleLanes = () => {
   const laneWidth = 1.8;
   const laneLength = 18;
+  const laneSpacing = 2.2; // Space between lanes
+  const numLanes = 5; // Total number of lanes
   
-  // Main lane surface
-  const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
-  const laneMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-  const lane = new THREE.Mesh(laneGeometry, laneMaterial);
-  lane.rotation.x = -Math.PI / 2;
-  lane.position.set(0, 0.005, 2);
-  scene.add(lane);
-  
-  // Lane gutters
-  const gutterGeometry = new THREE.BoxGeometry(0.2, 0.1, laneLength);
-  const gutterMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  
-  // Left gutter
-  const leftGutter = new THREE.Mesh(gutterGeometry, gutterMaterial);
-  leftGutter.position.set(-laneWidth/2 - 0.1, 0.05, 2);
-  scene.add(leftGutter);
-  
-  // Right gutter
-  const rightGutter = new THREE.Mesh(gutterGeometry, gutterMaterial);
-  rightGutter.position.set(laneWidth/2 + 0.1, 0.05, 2);
-  scene.add(rightGutter);
-  
-  // Foul line
-  const foulLineGeometry = new THREE.PlaneGeometry(laneWidth, 0.05);
-  const foulLineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const foulLine = new THREE.Mesh(foulLineGeometry, foulLineMaterial);
-  foulLine.rotation.x = -Math.PI / 2;
-  foulLine.position.set(0, 0.01, CONFIG.FOUL_LINE_Z);
-  scene.add(foulLine);
+  for (let i = 0; i < numLanes; i++) {
+    // Calculate X position for each lane (center lane at index 2)
+    const laneX = (i - Math.floor(numLanes / 2)) * laneSpacing;
+    const isActiveLane = i === Math.floor(numLanes / 2); // Center lane is active
+    
+    // Lane surface - brighter for active lane
+    const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
+    const laneColor = isActiveLane ? 0x8B4513 : 0x654321; // Brighter brown for active lane
+    const laneMaterial = new THREE.MeshLambertMaterial({ color: laneColor });
+    const lane = new THREE.Mesh(laneGeometry, laneMaterial);
+    lane.rotation.x = -Math.PI / 2;
+    lane.position.set(laneX, 0.005, 2);
+    scene.add(lane);
+    
+    // Lane gutters
+    const gutterGeometry = new THREE.BoxGeometry(0.2, 0.1, laneLength);
+    const gutterMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
+    
+    // Left gutter
+    const leftGutter = new THREE.Mesh(gutterGeometry, gutterMaterial);
+    leftGutter.position.set(laneX - laneWidth/2 - 0.1, 0.05, 2);
+    scene.add(leftGutter);
+    
+    // Right gutter
+    const rightGutter = new THREE.Mesh(gutterGeometry, gutterMaterial);
+    rightGutter.position.set(laneX + laneWidth/2 + 0.1, 0.05, 2);
+    scene.add(rightGutter);
+    
+    // Foul line for each lane
+    const foulLineGeometry = new THREE.PlaneGeometry(laneWidth, 0.05);
+    const foulLineMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const foulLine = new THREE.Mesh(foulLineGeometry, foulLineMaterial);
+    foulLine.rotation.x = -Math.PI / 2;
+    foulLine.position.set(laneX, 0.01, CONFIG.FOUL_LINE_Z);
+    scene.add(foulLine);
+    
+    // Add decorative pins for non-active lanes
+    if (!isActiveLane) {
+      createDecorativePins(laneX);
+    }
+    
+    // Lane number signs
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = isActiveLane ? '#FFD700' : '#666666'; // Gold for active lane
+    ctx.fillRect(0, 0, 64, 32);
+    ctx.fillStyle = isActiveLane ? '#000000' : '#FFFFFF';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${i + 1}`, 32, 20);
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    const signMaterial = new THREE.MeshBasicMaterial({ map: texture });
+    const signGeometry = new THREE.PlaneGeometry(0.4, 0.2);
+    const laneSign = new THREE.Mesh(signGeometry, signMaterial);
+    laneSign.position.set(laneX, 1.2, -6);
+    scene.add(laneSign);
+  }
 };
 
-// Initialize the simple cube room and single lane
+// Create decorative pins for non-active lanes
+const createDecorativePins = (laneX) => {
+  const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3;
+  
+  // Create decorative pins in reversed formation (1-2-3-4)
+  for (let row = 0; row < 4; row++) {
+    const pinsInRow = row + 1;
+    for (let col = 0; col < pinsInRow; col++) {
+      const x = laneX + (col - (pinsInRow - 1) / 2) * CONFIG.PIN_SPACING;
+      const z = PIN_SETUP_BASE_Z + row * CONFIG.PIN_ROW_SPACING;
+      
+      const pinGeometry = new THREE.CylinderGeometry(0.04, 0.06, CONFIG.PIN_H, 8);
+      const pinMaterial = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+      const decorativePin = new THREE.Mesh(pinGeometry, pinMaterial);
+      decorativePin.position.set(x, CONFIG.PIN_H / 2, z);
+      scene.add(decorativePin);
+    }
+  }
+};
+
+// Initialize the simple cube room and multiple lanes
 createSimpleCubeRoom();
-createSingleLane();
+createMultipleLanes();
 
 // ================= PHYSICS ==============
 const world = new CANNON.World();
@@ -295,11 +533,14 @@ function createPin(x, z) {
 function createBall() {
   console.log('🎾 Creating new ball');
   
+  // Get selected lane X position
+  const laneX = CONFIG.SELECTED_LANE_X || 0;
+  
   // Physics
   const shape = new CANNON.Sphere(CONFIG.BALL_R);
   const body = new CANNON.Body({ mass: 5 });
   body.addShape(shape);
-  body.position.set(0, CONFIG.BALL_R + 0.02, CONFIG.BALL_SPAWN_Z);
+  body.position.set(laneX, CONFIG.BALL_R + 0.02, CONFIG.BALL_SPAWN_Z);
   body.velocity.set(0, 0, 0);
   body.angularVelocity.set(0, 0, 0);
   world.addBody(body);
@@ -312,7 +553,7 @@ function createBall() {
   scene.add(mesh);
   
   ball = { body, mesh, thrown: false };
-  console.log('✅ Ball created at starting position');
+  console.log(`✅ Ball created on Lane ${selectedLane} at position x=${laneX}`);
 }
 
 function setupPins() {
@@ -327,6 +568,9 @@ function setupPins() {
   }
   pins.length = 0;
   
+  // Get selected lane X position
+  const laneX = CONFIG.SELECTED_LANE_X || 0;
+  
   // Create new pins in reversed triangle formation (1-2-3-4 from front to back)
   // Move the entire setup forward by reducing the base Z position
   const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3; // Move pins 3 units forward
@@ -334,7 +578,7 @@ function setupPins() {
   for (let row = 0; row < 4; row++) {
     const pinsInRow = row + 1; // Row 0 has 1 pin, row 1 has 2 pins, etc.
     for (let col = 0; col < pinsInRow; col++) {
-      const x = (col - (pinsInRow - 1) / 2) * CONFIG.PIN_SPACING;
+      const x = laneX + (col - (pinsInRow - 1) / 2) * CONFIG.PIN_SPACING;
       const z = PIN_SETUP_BASE_Z + row * CONFIG.PIN_ROW_SPACING; // Use the moved forward base position
       const pin = createPin(x, z);
       pins.push(pin);
@@ -342,7 +586,7 @@ function setupPins() {
   }
   
   pinsStandingAtStart = pins.length;
-  console.log(`✅ Set up ${pins.length} pins in reversed formation (1-2-3-4) - moved forward for better gameplay`);
+  console.log(`✅ Set up ${pins.length} pins on Lane ${selectedLane} at x=${laneX}`);
 }
 
 function isPinDown(pin) {
@@ -795,6 +1039,66 @@ function checkSettlement() {
   }
 }
 
+// Check for gutter ball (crossing black gutters on sides)
+function checkGutterBall() {
+  if (!ball || !ball.thrown || gameState !== 'ROLLING') return;
+  
+  const ballX = ball.body.position.x;
+  const ballZ = ball.body.position.z;
+  const laneWidth = 1.8;
+  const gutterBoundary = laneWidth / 2; // 0.9 units from lane center
+  
+  // Get the selected lane X position
+  const selectedLaneX = CONFIG.SELECTED_LANE_X || 0;
+  
+  // Calculate ball's position relative to the selected lane center
+  const ballXRelativeToLane = ballX - selectedLaneX;
+  
+  // Only check for gutter after ball has passed the pin area or had time to hit pins
+  const ballPassedPins = ballZ > CONFIG.PIN_BASE_Z - 2; // Allow ball to reach pin area first
+  
+  // Check if ball crossed into the gutters relative to the selected lane
+  if (ballPassedPins && Math.abs(ballXRelativeToLane) > gutterBoundary) {
+    const side = ballXRelativeToLane > 0 ? 'right' : 'left';
+    console.log(`🎳 GUTTER BALL! Ball went into ${side} gutter after pin interaction (Lane ${selectedLane})`);
+    console.log(`Ball X: ${ballX.toFixed(2)}, Lane X: ${selectedLaneX.toFixed(2)}, Relative: ${ballXRelativeToLane.toFixed(2)}, Boundary: ±${gutterBoundary}`);
+    
+    // Show gutter ball message
+    showCenterMessage(`🎳 GUTTER BALL! Ball went into the ${side} gutter`, 2000);
+    
+    // Force finish roll with current pin count (not 0)
+    finishRollWithGutter();
+  }
+}
+
+// Finish roll with gutter ball (count pins that were hit before gutter)
+function finishRollWithGutter() {
+  if (gameState === 'COMPLETE' || gameState === 'SETTLING') return;
+  
+  console.log('🎳 FINISHING ROLL - GUTTER BALL (counting pins hit)');
+  gameState = 'SETTLING';
+  
+  // Count pins that were actually knocked down before gutter
+  const pinsNowStanding = countStandingPins();
+  const pinsKnocked = Math.max(0, pinsStandingAtStart - pinsNowStanding);
+  const scored = Math.min(pinsStandingAtStart, pinsKnocked);
+  
+  console.log(`Gutter ball - but ${scored} pins were knocked down first`);
+  
+  // Add actual score to frame (not 0 if pins were hit)
+  const currentFrame = frames[frameIndex];
+  currentFrame.rolls.push(scored);
+  
+  // Show appropriate message
+  if (scored > 0) {
+    showMessage(`GUTTER BALL! But ${scored} pins were knocked down first`, 3000);
+  } else {
+    showMessage('GUTTER BALL! 0 pins knocked down', 2000);
+  }
+  
+  setupNextRoll(scored);
+}
+
 // ================= CONTROLS ==============
 window.addEventListener('mousemove', (e) => {
   if (gameState === 'READY') {
@@ -831,7 +1135,9 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
-  if (gameState === 'READY' && ball && !ball.thrown && !powerCharging) {
+  console.log(`🎯 MOUSEDOWN - gameState: ${gameState}, ball: ${!!ball}, ball.thrown: ${ball?.thrown}, powerCharging: ${powerCharging}, justSelectedLane: ${justSelectedLane}`);
+  
+  if (gameState === 'READY' && ball && !ball.thrown && !powerCharging && !justSelectedLane) {
     console.log('🎯 POWER CHARGING STARTED');
     powerCharging = true;
     currentPower = 0;
@@ -842,6 +1148,8 @@ window.addEventListener('mousedown', (e) => {
     if (powerBarElement) {
       powerBarElement.style.display = 'block';
     }
+  } else {
+    console.log('❌ Power charging blocked - conditions not met');
   }
 });
 
@@ -882,7 +1190,7 @@ window.addEventListener('mouseup', (e) => {
 
 window.addEventListener('click', () => {
   // This is kept for fallback, but mousedown/mouseup handle the main interaction
-  if (gameState === 'READY' && ball && !ball.thrown && !powerCharging) {
+  if (gameState === 'READY' && ball && !ball.thrown && !powerCharging && !justSelectedLane) {
     // Quick throw with random power if click without holding
     const power = CONFIG.BALL_MIN_SPEED + Math.random() * (CONFIG.BALL_MAX_SPEED - CONFIG.BALL_MIN_SPEED);
     const compensatedAngle = aimAngle - 0.6; // Same negative compensation
@@ -985,6 +1293,9 @@ function animate(time) {
   // Check for settlement
   checkSettlement();
   
+  // Check for gutter ball
+  checkGutterBall();
+  
   // Camera follows ball
   if (ball && ball.thrown && gameState === 'ROLLING') {
     const ballPos = ball.body.position;
@@ -992,9 +1303,10 @@ function animate(time) {
     camera.position.z = ballPos.z - 8;
     camera.lookAt(ballPos.x, 1, ballPos.z + 5);
   } else {
-    // Return camera to start
-    camera.position.set(0, 3.8, -8);
-    camera.lookAt(0, 1, CONFIG.PIN_BASE_Z);
+    // Return camera to selected lane position
+    const selectedLaneX = CONFIG.SELECTED_LANE_X || 0;
+    camera.position.set(selectedLaneX, 3.8, -8);
+    camera.lookAt(selectedLaneX, 1, CONFIG.PIN_BASE_Z);
   }
   
   renderer.render(scene, camera);
@@ -1035,5 +1347,14 @@ function init() {
   console.log('✅ Game initialized');
 }
 
-// Start the game
-init();
+// Start the game with lane selection
+if (typeof window !== 'undefined') {
+  // Wait for DOM to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      createLaneSelectionModal();
+    });
+  } else {
+    createLaneSelectionModal();
+  }
+}
