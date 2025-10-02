@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Bowling — Full Scoring Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="mainHeader">
+    <h1><span class="bowlingIcon">🎳</span> Bowling Alley <span class="subtitle">Full Scoring Demo</span></h1>
+  </header>
+
+  <main id="mainContent">
+    <div id="container"></div>
+
+    <div id="topLeft" class="infoBar">Frame: <span id="frameNo">1</span> • Roll: <span id="rollNo">1</span></div>
+
+    <section id="ui">
+      <div id="scoreboard">
+        <!-- Scoreboard will be rendered here -->
+      </div>
+
+      <div class="row controls" style="margin-top:12px;">
+        <button id="resetGameBtn" class="btn primary"><span class="icon">🔄</span> Reset Game</button>
+        <label class="small rampLabel" style="margin-left:auto;">
+          <input type="checkbox" id="rampMode" /> Ramp mode
+        </label>
+      </div>
+
+      <div id="message"></div>
+    </section>
+
+    <div id="powerBar"><div id="powerFill"></div></div>
+  </main>
+
+  <script type="module" src="script_fixed.js"></script>
+</body>
+</html>

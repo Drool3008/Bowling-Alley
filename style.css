@@ -1,0 +1,208 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: linear-gradient(135deg, #0b0f14 60%, #1e293b 100%);
+  font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+  color: #dbeafe;
+  overflow: hidden;
+}
+
+#mainHeader {
+  width: 100%;
+  background: rgba(2, 6, 23, 0.92);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.3);
+  padding: 18px 0 10px 0;
+  text-align: center;
+}
+#mainHeader h1 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin: 0;
+}
+.bowlingIcon {
+  font-size: 2.2rem;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.subtitle {
+  font-size: 1.1rem;
+  font-weight: 400;
+  color: #60a5fa;
+  margin-left: 10px;
+}
+
+#mainFooter {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(2, 6, 23, 0.92);
+  color: #a5b4fc;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+  box-shadow: 0 -2px 16px rgba(0,0,0,0.2);
+}
+.icon {
+  font-size: 1.1em;
+  vertical-align: middle;
+}
+
+/* --- UI Panel --- */
+#ui {
+  position: absolute;
+  right: 18px;
+  top: 80px;
+  width: 370px;
+  background: rgba(15, 23, 42, 0.92);
+  padding: 18px 16px 16px 16px;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  z-index: 2;
+}
+
+.infoBar {
+  position: absolute;
+  left: 18px;
+  top: 80px;
+  background: rgba(30, 41, 59, 0.85);
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  z-index: 2;
+}
+
+/* --- Scoreboard --- */
+#scoreboard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+.frameCard {
+  width: 64px;
+  background: linear-gradient(135deg, #071023 70%, #1e293b 100%);
+  border-radius: 10px;
+  padding: 8px 6px 10px 6px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  border: 2px solid #334155;
+  transition: transform 0.2s;
+}
+.frameCard:hover {
+  transform: scale(1.06);
+  border-color: #60a5fa;
+}
+.rolls {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* --- Buttons & Controls --- */
+.btn {
+  background: linear-gradient(90deg, #2563eb 60%, #60a5fa 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: background 0.2s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn.primary:hover {
+  background: linear-gradient(90deg, #60a5fa 60%, #2563eb 100%);
+  transform: scale(1.05);
+}
+.rampLabel {
+  color: #a5b4fc;
+  font-size: 1rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+input[type="checkbox"] {
+  accent-color: #60a5fa;
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Message --- */
+#message {
+  margin-top: 12px;
+  min-height: 24px;
+  font-size: 1.1rem;
+  color: #fbbf24;
+  text-align: center;
+  font-weight: 500;
+}
+
+/* --- Power Bar --- */
+#powerBar {
+  position: absolute;
+  left: 50%;
+  bottom: 60px;
+  transform: translateX(-50%);
+  width: 340px;
+  height: 22px;
+  background: linear-gradient(90deg, #334155 60%, #2563eb 100%);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px #2563eb55;
+  overflow: hidden;
+  z-index: 2;
+}
+#powerFill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #fbbf24 40%, #60a5fa 100%);
+  border-radius: 12px;
+  box-shadow: 0 0 16px #fbbf24aa, 0 0 8px #60a5fa99;
+  transition: width 0.3s cubic-bezier(.4,2,.3,1), background 0.2s;
+}
+
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  #ui {
+    width: 98vw;
+    left: 1vw;
+    right: 1vw;
+    top: 60px;
+    padding: 10px 4vw;
+  }
+  #mainHeader {
+    padding: 12px 0 6px 0;
+  }
+  #mainFooter {
+    font-size: 0.95rem;
+    padding: 8px 0;
+  }
+  .infoBar {
+    left: 1vw;
+    top: 60px;
+    padding: 6px 8vw;
+    font-size: 1rem;
+  }
+  #powerBar {
+    width: 90vw;
+    bottom: 32px;
+  }
+}
+
+/* --- 3D Container --- */
+#container {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
