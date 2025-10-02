@@ -22,6 +22,10 @@ let justSelectedLane = false; // Flag to prevent immediate auto-throw
 const totalLanes = 5;
 const laneSpacing = 2.2;
 
+// Pin management for all lanes
+const decorativePinsByLane = new Map(); // Store decorative pins for inactive lanes
+let currentPhysicsLane = 3; // Track which lane has physics pins
+
 // ================= SCENE / RENDERER ==============
 const container = document.getElementById('container');
 const scene = new THREE.Scene();
@@ -316,8 +320,75 @@ function initializeGameOnLane(laneX) {
   // Update CONFIG for selected lane
   CONFIG.SELECTED_LANE_X = laneX;
   
+  // Switch pins to the selected lane
+  switchPhysicsPinsToLane(selectedLane);
+  
   // Start the game
   init();
+}
+
+// ================= PIN MANAGEMENT FUNCTIONS ==============
+// Remove decorative pins from a specific lane
+function removeDecorativePinsFromLane(laneNumber) {
+  const decorativePins = decorativePinsByLane.get(laneNumber);
+  if (decorativePins && decorativePins.length > 0) {
+    decorativePins.forEach(pin => {
+      scene.remove(pin);
+      pin.geometry.dispose();
+      pin.material.dispose();
+    });
+    decorativePinsByLane.set(laneNumber, []);
+    console.log(`🧹 Removed decorative pins from Lane ${laneNumber}`);
+  }
+}
+
+// Add decorative pins to a specific lane
+function addDecorativePinsToLane(laneNumber) {
+  // Calculate lane X position
+  const laneX = (laneNumber - Math.ceil(totalLanes / 2)) * laneSpacing;
+  
+  // Remove any existing decorative pins first
+  removeDecorativePinsFromLane(laneNumber);
+  
+  // Create new decorative pins
+  const decorativePins = [];
+  const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3;
+  
+  for (let row = 0; row < 4; row++) {
+    const pinsInRow = row + 1;
+    for (let col = 0; col < pinsInRow; col++) {
+      const x = laneX + (col - (pinsInRow - 1) / 2) * CONFIG.PIN_SPACING;
+      const z = PIN_SETUP_BASE_Z + row * CONFIG.PIN_ROW_SPACING;
+      
+      const pinGeometry = new THREE.CylinderGeometry(0.04, 0.06, CONFIG.PIN_H, 8);
+      const pinMaterial = new THREE.MeshLambertMaterial({ color: 0xdddddd });
+      const decorativePin = new THREE.Mesh(pinGeometry, pinMaterial);
+      decorativePin.position.set(x, CONFIG.PIN_H / 2, z);
+      scene.add(decorativePin);
+      decorativePins.push(decorativePin);
+    }
+  }
+  
+  decorativePinsByLane.set(laneNumber, decorativePins);
+  console.log(`✨ Added decorative pins to Lane ${laneNumber}`);
+}
+
+// Switch physics pins to a new lane
+function switchPhysicsPinsToLane(newLaneNumber) {
+  console.log(`🔄 Switching physics pins from Lane ${currentPhysicsLane} to Lane ${newLaneNumber}`);
+  
+  // Add decorative pins back to the old physics lane
+  if (currentPhysicsLane !== newLaneNumber) {
+    addDecorativePinsToLane(currentPhysicsLane);
+  }
+  
+  // Remove decorative pins from the new lane
+  removeDecorativePinsFromLane(newLaneNumber);
+  
+  // Update current physics lane
+  currentPhysicsLane = newLaneNumber;
+  
+  // Setup physics pins for the new lane will be handled by setupPins()
 }
 
 // ================= SIMPLE CLOSED CUBE ROOM ==============
@@ -378,7 +449,8 @@ const createMultipleLanes = () => {
   for (let i = 0; i < numLanes; i++) {
     // Calculate X position for each lane (center lane at index 2)
     const laneX = (i - Math.floor(numLanes / 2)) * laneSpacing;
-    const isActiveLane = i === Math.floor(numLanes / 2); // Center lane is active
+    const laneNumber = i + 1; // Lanes numbered 1-5
+    const isActiveLane = laneNumber === selectedLane; // Use selectedLane instead of fixed center
     
     // Lane surface - brighter for active lane
     const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
@@ -413,7 +485,7 @@ const createMultipleLanes = () => {
     
     // Add decorative pins for non-active lanes
     if (!isActiveLane) {
-      createDecorativePins(laneX);
+      createDecorativePins(laneX, laneNumber);
     }
     
     // Lane number signs
@@ -438,8 +510,9 @@ const createMultipleLanes = () => {
 };
 
 // Create decorative pins for non-active lanes
-const createDecorativePins = (laneX) => {
+const createDecorativePins = (laneX, laneNumber) => {
   const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3;
+  const decorativePins = [];
   
   // Create decorative pins in reversed formation (1-2-3-4)
   for (let row = 0; row < 4; row++) {
@@ -453,8 +526,12 @@ const createDecorativePins = (laneX) => {
       const decorativePin = new THREE.Mesh(pinGeometry, pinMaterial);
       decorativePin.position.set(x, CONFIG.PIN_H / 2, z);
       scene.add(decorativePin);
+      decorativePins.push(decorativePin);
     }
   }
+  
+  // Store decorative pins for this lane
+  decorativePinsByLane.set(laneNumber, decorativePins);
 };
 
 // Initialize the simple cube room and multiple lanes
@@ -464,18 +541,43 @@ createMultipleLanes();
 // ================= PHYSICS ==============
 const world = new CANNON.World();
 world.gravity.set(0, -9.82, 0);
-world.broadphase = new CANNON.NaiveBroadphase();
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.defaultContactMaterial.friction = 0.4;
+world.defaultContactMaterial.restitution = 0.3;
+
+// Create physics materials
+const pinMaterial = new CANNON.Material('pin');
+const ballMaterial = new CANNON.Material('ball');
+const groundMaterial = new CANNON.Material('ground');
+
+// Contact materials for realistic interactions
+const ballPinContact = new CANNON.ContactMaterial(ballMaterial, pinMaterial, {
+  friction: 0.2,
+  restitution: 0.6
+});
+const ballGroundContact = new CANNON.ContactMaterial(ballMaterial, groundMaterial, {
+  friction: 0.4,
+  restitution: 0.1
+});
+const pinGroundContact = new CANNON.ContactMaterial(pinMaterial, groundMaterial, {
+  friction: 0.7,
+  restitution: 0.1
+});
+
+world.addContactMaterial(ballPinContact);
+world.addContactMaterial(ballGroundContact);
+world.addContactMaterial(pinGroundContact);
 
 // Ground
 const groundShape = new CANNON.Plane();
-const groundBody = new CANNON.Body({ mass: 0 });
+const groundBody = new CANNON.Body({ mass: 0, material: groundMaterial });
 groundBody.addShape(groundShape);
 groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
 world.addBody(groundBody);
 
 const groundGeometry = new THREE.PlaneGeometry(20, 30);
-const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
-const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+const groundVisualMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+const groundMesh = new THREE.Mesh(groundGeometry, groundVisualMaterial);
 groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
@@ -513,11 +615,21 @@ for (let i = 0; i < 10; i++) {
 
 // ================= FUNCTIONS ==============
 function createPin(x, z) {
-  // Physics
+  // Physics - lighter pins that fall easier
   const shape = new CANNON.Cylinder(0.03, 0.06, CONFIG.PIN_H, 8);
-  const body = new CANNON.Body({ mass: 0.5 });
+  const body = new CANNON.Body({ 
+    mass: 1.0, // Reduced mass for easier knockdown
+    material: pinMaterial,
+    linearDamping: 0.05, // Less damping for more movement
+    angularDamping: 0.05
+  });
   body.addShape(shape);
   body.position.set(x, CONFIG.PIN_H / 2, z);
+  
+  // Start with zero velocity
+  body.velocity.set(0, 0, 0);
+  body.angularVelocity.set(0, 0, 0);
+  
   world.addBody(body);
   
   // Visual
@@ -538,7 +650,10 @@ function createBall() {
   
   // Physics
   const shape = new CANNON.Sphere(CONFIG.BALL_R);
-  const body = new CANNON.Body({ mass: 5 });
+  const body = new CANNON.Body({ 
+    mass: 5, // Standard ball mass
+    material: ballMaterial
+  });
   body.addShape(shape);
   body.position.set(laneX, CONFIG.BALL_R + 0.02, CONFIG.BALL_SPAWN_Z);
   body.velocity.set(0, 0, 0);
@@ -557,9 +672,9 @@ function createBall() {
 }
 
 function setupPins() {
-  console.log('🎳 SETTING UP PINS');
+  console.log(`🎳 SETTING UP PHYSICS PINS FOR LANE ${selectedLane}`);
   
-  // Clear existing pins
+  // Clear existing physics pins
   for (const pin of pins) {
     scene.remove(pin.mesh);
     world.removeBody(pin.body);
@@ -571,22 +686,24 @@ function setupPins() {
   // Get selected lane X position
   const laneX = CONFIG.SELECTED_LANE_X || 0;
   
-  // Create new pins in reversed triangle formation (1-2-3-4 from front to back)
-  // Move the entire setup forward by reducing the base Z position
-  const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3; // Move pins 3 units forward
+  // Ensure decorative pins are removed from the selected lane
+  removeDecorativePinsFromLane(selectedLane);
+  
+  // Create new physics pins in reversed triangle formation (1-2-3-4 from front to back)
+  const PIN_SETUP_BASE_Z = CONFIG.PIN_BASE_Z - 3;
   
   for (let row = 0; row < 4; row++) {
-    const pinsInRow = row + 1; // Row 0 has 1 pin, row 1 has 2 pins, etc.
+    const pinsInRow = row + 1;
     for (let col = 0; col < pinsInRow; col++) {
       const x = laneX + (col - (pinsInRow - 1) / 2) * CONFIG.PIN_SPACING;
-      const z = PIN_SETUP_BASE_Z + row * CONFIG.PIN_ROW_SPACING; // Use the moved forward base position
+      const z = PIN_SETUP_BASE_Z + row * CONFIG.PIN_ROW_SPACING;
       const pin = createPin(x, z);
       pins.push(pin);
     }
   }
   
   pinsStandingAtStart = pins.length;
-  console.log(`✅ Set up ${pins.length} pins on Lane ${selectedLane} at x=${laneX}`);
+  console.log(`✅ Set up ${pins.length} PHYSICS pins on Lane ${selectedLane} at x=${laneX}`);
 }
 
 function isPinDown(pin) {
@@ -598,10 +715,13 @@ function isPinDown(pin) {
   // Check if pin fell over
   const upVector = new THREE.Vector3(0, 1, 0);
   upVector.applyQuaternion(new THREE.Quaternion(quat.x, quat.y, quat.z, quat.w));
-  const tiltAngle = Math.acos(upVector.y) * (180 / Math.PI);
+  const tiltAngle = Math.acos(Math.max(-1, Math.min(1, upVector.y))) * (180 / Math.PI);
   
-  // Very sensitive - 15 degrees
-  return tiltAngle > 15 || pos.y < 0.1;
+  // Pin is down if it's tilted significantly OR has fallen below ground level
+  const significantTilt = tiltAngle > 20; // More sensitive - 20 degrees
+  const belowGround = pos.y < CONFIG.PIN_H * 0.3; // If pin height is less than 30% of original
+  
+  return significantTilt || belowGround;
 }
 
 function countStandingPins() {
@@ -617,10 +737,11 @@ function removeKnockedPins() {
   
   const initialCount = pins.length;
   
-  // Remove knocked pins
+  // Remove knocked pins immediately - no position resetting!
   for (let i = pins.length - 1; i >= 0; i--) {
     const pin = pins[i];
     if (isPinDown(pin)) {
+      console.log(`Removing knocked pin at position (${pin.body.position.x.toFixed(2)}, ${pin.body.position.z.toFixed(2)})`);
       scene.remove(pin.mesh);
       world.removeBody(pin.body);
       pin.mesh.geometry.dispose();
@@ -1025,16 +1146,18 @@ function checkSettlement() {
   
   const ballVel = ball.body.velocity.length();
   let maxPinVel = 0;
+  
   for (const pin of pins) {
-    maxPinVel = Math.max(maxPinVel, pin.body.velocity.length());
+    const pinVel = pin.body.velocity.length();
+    maxPinVel = Math.max(maxPinVel, pinVel);
   }
   
-  const ballStopped = ballVel < 1.0;
-  const pinsStopped = maxPinVel < 0.5;
-  const ballPastPins = ball.body.position.z > CONFIG.PIN_BASE_Z;
+  const ballStopped = ballVel < 0.5;
+  const pinsStopped = maxPinVel < 0.3;
+  const ballPastPins = ball.body.position.z > CONFIG.PIN_BASE_Z + 1;
   
   if ((ballStopped && pinsStopped) || ballPastPins) {
-    console.log('⏹️ Settlement detected');
+    console.log('⏹️ Settlement detected - ball vel:', ballVel.toFixed(2), 'max pin vel:', maxPinVel.toFixed(2));
     finishRoll();
   }
 }
