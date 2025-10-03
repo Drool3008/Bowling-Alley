@@ -147,7 +147,286 @@ let characterBall = null; // Ball that the character holds during charging
 // ================= SCENE / RENDERER ==============
 const container = document.getElementById('container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0b0f14);
+scene.background = new THREE.Color(0x1a1a2e);
+
+// ================= BOWLING ALLEY BACKGROUND ENVIRONMENT ==============
+function createBowlingAlleyBackground() {
+  // Create a large background geometry that won't move with camera
+  const backgroundGroup = new THREE.Group();
+  backgroundGroup.name = 'background';
+  
+  // Back wall with bowling alley pattern
+  const backWallGeometry = new THREE.PlaneGeometry(25, 15);
+  
+  // Create a canvas for the back wall texture
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  
+  // Create a bowling alley interior background
+  // Base wall color - dark wood paneling
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, '#2d1810'); // Dark brown at top
+  gradient.addColorStop(0.3, '#4a2c17'); // Medium brown
+  gradient.addColorStop(0.7, '#3d2313'); // Darker brown
+  gradient.addColorStop(1, '#1a0f08'); // Very dark at bottom
+  
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Add wood paneling lines
+  ctx.strokeStyle = '#1a0f08';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < canvas.height; i += 40) {
+    ctx.beginPath();
+    ctx.moveTo(0, i);
+    ctx.lineTo(canvas.width, i);
+    ctx.stroke();
+  }
+  
+  // Add vertical wood grain
+  ctx.strokeStyle = '#2d1810';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < canvas.width; i += 60) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, canvas.height);
+    ctx.stroke();
+  }
+  
+  // Add some neon-style bowling signs
+  ctx.fillStyle = '#ff6b9d';
+  ctx.font = 'bold 24px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('STRIKE ZONE', canvas.width / 2, 60);
+  
+  ctx.fillStyle = '#4ecdc4';
+  ctx.font = 'bold 16px Arial';
+  ctx.fillText('PROFESSIONAL BOWLING', canvas.width / 2, 90);
+  
+  // Add some decorative elements
+  ctx.fillStyle = '#ffbe0b';
+  ctx.beginPath();
+  ctx.arc(100, 150, 15, 0, Math.PI * 2);
+  ctx.fill();
+  
+  ctx.beginPath();
+  ctx.arc(412, 150, 15, 0, Math.PI * 2);
+  ctx.fill();
+  
+  const backWallTexture = new THREE.CanvasTexture(canvas);
+  const backWallMaterial = new THREE.MeshLambertMaterial({ 
+    map: backWallTexture,
+    side: THREE.FrontSide
+  });
+  
+  const backWall = new THREE.Mesh(backWallGeometry, backWallMaterial);
+  backWall.position.set(0, 7, 15); // Far back
+  backgroundGroup.add(backWall);
+  
+  // Side walls with detailed textures
+  const sideWallGeometry = new THREE.PlaneGeometry(30, 15);
+  
+  // Create canvas for left wall texture
+  const leftCanvas = document.createElement('canvas');
+  leftCanvas.width = 512;
+  leftCanvas.height = 256;
+  const leftCtx = leftCanvas.getContext('2d');
+  
+  // Left wall - Sports/Bowling themed
+  const leftGradient = leftCtx.createLinearGradient(0, 0, 0, leftCanvas.height);
+  leftGradient.addColorStop(0, '#1a2d1a'); // Dark green at top
+  leftGradient.addColorStop(0.4, '#2d4a2d'); // Medium green
+  leftGradient.addColorStop(0.8, '#1a3d1a'); // Darker green
+  leftGradient.addColorStop(1, '#0f1a0f'); // Very dark at bottom
+  
+  leftCtx.fillStyle = leftGradient;
+  leftCtx.fillRect(0, 0, leftCanvas.width, leftCanvas.height);
+  
+  // Add paneling lines
+  leftCtx.strokeStyle = '#0f1a0f';
+  leftCtx.lineWidth = 2;
+  for (let i = 0; i < leftCanvas.height; i += 35) {
+    leftCtx.beginPath();
+    leftCtx.moveTo(0, i);
+    leftCtx.lineTo(leftCanvas.width, i);
+    leftCtx.stroke();
+  }
+  
+  // Add bowling-themed decorations
+  leftCtx.fillStyle = '#ffff00';
+  leftCtx.font = 'bold 20px Arial';
+  leftCtx.textAlign = 'center';
+  leftCtx.fillText('LANE RECORDS', leftCanvas.width / 2, 50);
+  
+  leftCtx.fillStyle = '#ffffff';
+  leftCtx.font = '14px Arial';
+  leftCtx.fillText('HIGH SCORE: 300', leftCanvas.width / 2, 80);
+  leftCtx.fillText('PERFECT GAME', leftCanvas.width / 2, 100);
+  
+  // Add some trophy/award graphics
+  leftCtx.fillStyle = '#ffd700';
+  leftCtx.beginPath();
+  leftCtx.arc(leftCanvas.width / 2, 140, 20, 0, Math.PI * 2);
+  leftCtx.fill();
+  
+  leftCtx.fillStyle = '#ff6b00';
+  leftCtx.font = 'bold 12px Arial';
+  leftCtx.fillText('🏆', leftCanvas.width / 2 - 6, 147);
+  
+  // Add decorative pins
+  for (let i = 0; i < 3; i++) {
+    leftCtx.fillStyle = '#ffffff';
+    leftCtx.beginPath();
+    leftCtx.ellipse(100 + (i * 80), 190, 8, 15, 0, 0, Math.PI * 2);
+    leftCtx.fill();
+  }
+  
+  const leftWallTexture = new THREE.CanvasTexture(leftCanvas);
+  const leftWallMaterial = new THREE.MeshLambertMaterial({ 
+    map: leftWallTexture,
+    side: THREE.FrontSide
+  });
+  
+  // Create canvas for right wall texture
+  const rightCanvas = document.createElement('canvas');
+  rightCanvas.width = 512;
+  rightCanvas.height = 256;
+  const rightCtx = rightCanvas.getContext('2d');
+  
+  // Right wall - Vintage bowling theme
+  const rightGradient = rightCtx.createLinearGradient(0, 0, 0, rightCanvas.height);
+  rightGradient.addColorStop(0, '#2d1a1a'); // Dark red at top
+  rightGradient.addColorStop(0.4, '#4a2d2d'); // Medium red
+  rightGradient.addColorStop(0.8, '#3d1a1a'); // Darker red
+  rightGradient.addColorStop(1, '#1a0f0f'); // Very dark at bottom
+  
+  rightCtx.fillStyle = rightGradient;
+  rightCtx.fillRect(0, 0, rightCanvas.width, rightCanvas.height);
+  
+  // Add paneling lines
+  rightCtx.strokeStyle = '#1a0f0f';
+  rightCtx.lineWidth = 2;
+  for (let i = 0; i < rightCanvas.height; i += 35) {
+    rightCtx.beginPath();
+    rightCtx.moveTo(0, i);
+    rightCtx.lineTo(rightCanvas.width, i);
+    rightCtx.stroke();
+  }
+  
+  // Add vintage bowling decorations
+  rightCtx.fillStyle = '#ff4d6d';
+  rightCtx.font = 'bold 20px Arial';
+  rightCtx.textAlign = 'center';
+  rightCtx.fillText('VINTAGE LANES', rightCanvas.width / 2, 50);
+  
+  rightCtx.fillStyle = '#ffffff';
+  rightCtx.font = '14px Arial';
+  rightCtx.fillText('EST. 1952', rightCanvas.width / 2, 80);
+  rightCtx.fillText('CLASSIC BOWLING', rightCanvas.width / 2, 100);
+  
+  // Add vintage clock decoration
+  rightCtx.strokeStyle = '#ffd700';
+  rightCtx.lineWidth = 3;
+  rightCtx.beginPath();
+  rightCtx.arc(rightCanvas.width / 2, 140, 25, 0, Math.PI * 2);
+  rightCtx.stroke();
+  
+  rightCtx.fillStyle = '#ffd700';
+  rightCtx.font = 'bold 16px Arial';
+  rightCtx.fillText('⏰', rightCanvas.width / 2 - 8, 147);
+  
+  // Add decorative bowling balls
+  for (let i = 0; i < 3; i++) {
+    rightCtx.fillStyle = i % 2 === 0 ? '#000000' : '#ff0000';
+    rightCtx.beginPath();
+    rightCtx.arc(120 + (i * 70), 190, 12, 0, Math.PI * 2);
+    rightCtx.fill();
+    
+    // Add finger holes
+    rightCtx.fillStyle = '#333333';
+    rightCtx.beginPath();
+    rightCtx.arc(120 + (i * 70) - 3, 188, 2, 0, Math.PI * 2);
+    rightCtx.fill();
+    rightCtx.beginPath();
+    rightCtx.arc(120 + (i * 70) + 3, 188, 2, 0, Math.PI * 2);
+    rightCtx.fill();
+    rightCtx.beginPath();
+    rightCtx.arc(120 + (i * 70), 193, 2, 0, Math.PI * 2);
+    rightCtx.fill();
+  }
+  
+  const rightWallTexture = new THREE.CanvasTexture(rightCanvas);
+  const rightWallMaterial = new THREE.MeshLambertMaterial({ 
+    map: rightWallTexture,
+    side: THREE.FrontSide
+  });
+  
+  // Left wall
+  const leftWall = new THREE.Mesh(sideWallGeometry, leftWallMaterial);
+  leftWall.rotation.y = Math.PI / 2;
+  leftWall.position.set(-12, 7, 0);
+  backgroundGroup.add(leftWall);
+  
+  // Right wall
+  const rightWall = new THREE.Mesh(sideWallGeometry, rightWallMaterial);
+  rightWall.rotation.y = -Math.PI / 2;
+  rightWall.position.set(12, 7, 0);
+  backgroundGroup.add(rightWall);
+  
+  // Ceiling with recessed lighting pattern
+  const ceilingGeometry = new THREE.PlaneGeometry(25, 30);
+  const ceilingMaterial = new THREE.MeshLambertMaterial({ 
+    color: 0x3d3d3d,
+    side: THREE.BackSide
+  });
+  
+  const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.set(0, 15, 0);
+  backgroundGroup.add(ceiling);
+  
+  // Add some atmospheric elements
+  // Distant decorative elements that give depth
+  const decorativeElements = new THREE.Group();
+  
+  // Add some distant "seating area" silhouettes
+  for (let i = 0; i < 8; i++) {
+    const seatGeometry = new THREE.BoxGeometry(0.5, 0.8, 0.5);
+    const seatMaterial = new THREE.MeshLambertMaterial({ 
+      color: 0x1a1a1a,
+      transparent: true,
+      opacity: 0.4
+    });
+    const seat = new THREE.Mesh(seatGeometry, seatMaterial);
+    seat.position.set(-6 + (i * 1.5), 0.4, 12);
+    decorativeElements.add(seat);
+  }
+  
+  // Add some decorative pillars
+  for (let i = 0; i < 4; i++) {
+    const pillarGeometry = new THREE.CylinderGeometry(0.2, 0.3, 8, 8);
+    const pillarMaterial = new THREE.MeshLambertMaterial({ 
+      color: 0x4a2c17,
+      transparent: true,
+      opacity: 0.6
+    });
+    const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+    pillar.position.set(-10 + (i * 6.5), 4, 10);
+    decorativeElements.add(pillar);
+  }
+  
+  backgroundGroup.add(decorativeElements);
+  
+  // Make sure background doesn't move with camera by adding it to scene root
+  scene.add(backgroundGroup);
+  
+  return backgroundGroup;
+}
+
+// Create the bowling alley background
+const bowlingBackground = createBowlingAlleyBackground();
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 200);
 camera.position.set(0, 3.8, -8);
@@ -167,186 +446,124 @@ directionalLight.position.set(5, 10, 5);
 directionalLight.castShadow = true;
 scene.add(directionalLight);
 
-// ================= BOWLING ALLEY DECORATIVE LIGHTING ==============
-// Create comprehensive lane-specific lighting like in real bowling alleys
-const createBowlingAlleyLights = () => {
-  const lights = [];
+// ================= SIMPLE LANE LIGHTING ==============
+// Create 3 simple lamps positioned lengthwise along both sides of the lanes
+const createSimpleLaneLamps = () => {
+  const lamps = [];
   
-  // Main lane lighting - colorful overhead lights for each lane (3 lights per lane)
-  const laneColors = [
-    { light: 0xff8888, bulb: 0xff6666 }, // Red-ish for lane 1
-    { light: 0x88ff88, bulb: 0x66ff66 }, // Green-ish for lane 2  
-    { light: 0xfffff0, bulb: 0xffffe0 }, // Warm white for lane 3 (center)
-    { light: 0x8888ff, bulb: 0x6666ff }, // Blue-ish for lane 4
-    { light: 0xffaa88, bulb: 0xff9966 }  // Orange-ish for lane 5
+  // Create 3 lamps positioned along the length of the lanes
+  const lampPositions = [
+    { z: -3, name: 'front' },   // Front lamp
+    { z: 3, name: 'middle' },   // Middle lamp  
+    { z: 9, name: 'back' }      // Back lamp (near pins)
   ];
   
-  for (let i = 0; i < totalLanes; i++) {
-    // Calculate X position for each lane
-    const laneX = (i + 1 - Math.ceil(totalLanes / 2)) * laneSpacing;
+  // Create lamps on both sides
+  const sides = [
+    { x: -8, name: 'left' },   // Left side
+    { x: 8, name: 'right' }    // Right side
+  ];
+  
+  for (let sideIndex = 0; sideIndex < sides.length; sideIndex++) {
+    const side = sides[sideIndex];
     
-    // Create 3 overhead lights per lane positioned along the lane length
-    const lightPositions = [
-      { z: -5, name: 'front' },   // Front of lane
-      { z: 2, name: 'middle' },   // Middle of lane  
-      { z: 9, name: 'back' }      // Back of lane (near pins)
-    ];
-    
-    for (let j = 0; j < lightPositions.length; j++) {
-      const lightPos = lightPositions[j];
+    for (let i = 0; i < lampPositions.length; i++) {
+      const lampPos = lampPositions[i];
       
-      const laneLight = new THREE.SpotLight(laneColors[i].light, 5.0, 40, Math.PI / 6, 0.2);
-      laneLight.position.set(laneX, 9, lightPos.z);
-      laneLight.target.position.set(laneX, 0, lightPos.z);
-      laneLight.castShadow = false; // Temporarily disable shadows for performance
-      scene.add(laneLight);
-      scene.add(laneLight.target);
+      // Create lamp base (wider, more visible)
+      const baseGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.2, 8);
+      const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+      const base = new THREE.Mesh(baseGeometry, baseMaterial);
+      base.position.set(side.x, 0.1, lampPos.z);
+      scene.add(base);
       
-      // Realistic hanging light fixtures
-      const fixtureGroup = new THREE.Group();
+      // Create lamp post (metallic look)
+      const postGeometry = new THREE.CylinderGeometry(0.06, 0.08, 3.2, 8);
+      const postMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+      const post = new THREE.Mesh(postGeometry, postMaterial);
+      post.position.set(side.x, 1.8, lampPos.z);
+      scene.add(post);
       
-      // Metal housing
-      const housingGeometry = new THREE.CylinderGeometry(0.3, 0.4, 0.25, 12);
-      const housingMaterial = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
-      const housing = new THREE.Mesh(housingGeometry, housingMaterial);
-      fixtureGroup.add(housing);
+      // Lamp shade/housing (lighter color, more visible)
+      const shadeGeometry = new THREE.CylinderGeometry(0.35, 0.25, 0.4, 12);
+      const shadeMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+      const shade = new THREE.Mesh(shadeGeometry, shadeMaterial);
+      shade.position.set(side.x, 3.6, lampPos.z);
+      scene.add(shade);
       
-      // Reflector inside
-      const reflectorGeometry = new THREE.CylinderGeometry(0.25, 0.35, 0.2, 12);
+      // Inner reflector (bright metallic)
+      const reflectorGeometry = new THREE.CylinderGeometry(0.3, 0.2, 0.35, 12);
       const reflectorMaterial = new THREE.MeshLambertMaterial({ color: 0xcccccc });
       const reflector = new THREE.Mesh(reflectorGeometry, reflectorMaterial);
-      reflector.position.y = -0.05;
-      fixtureGroup.add(reflector);
+      reflector.position.set(side.x, 3.6, lampPos.z);
+      scene.add(reflector);
       
-      // Hanging chain/cord
-      const cordGeometry = new THREE.CylinderGeometry(0.015, 0.015, 0.8, 6);
-      const cordMaterial = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
-      const cord = new THREE.Mesh(cordGeometry, cordMaterial);
-      cord.position.y = 0.5;
-      fixtureGroup.add(cord);
-      
-      // Glowing light bulb effect with lane-specific color
+      // Light bulb (bright and glowing)
       const bulbGeometry = new THREE.SphereGeometry(0.1, 16, 16);
       const bulbMaterial = new THREE.MeshBasicMaterial({ 
-        color: laneColors[i].bulb,
-        transparent: true,
-        opacity: 0.9
+        color: 0xffff88,
+        transparent: false,
+        opacity: 1.0
       });
       const bulb = new THREE.Mesh(bulbGeometry, bulbMaterial);
-      bulb.position.y = -0.15;
-      fixtureGroup.add(bulb);
+      bulb.position.set(side.x, 3.6, lampPos.z);
+      scene.add(bulb);
       
-      fixtureGroup.position.copy(laneLight.position);
-      fixtureGroup.position.y -= 0.3;
-      scene.add(fixtureGroup);
-      
-      lights.push({ light: laneLight, fixture: fixtureGroup, bulb: bulb });
-    }
-  }
-  
-  // Pin area special lighting - dramatic bright lighting
-  const pinAreaLight = new THREE.SpotLight(0xffffff, 4.0, 25, Math.PI / 3.5, 0.15);
-  pinAreaLight.position.set(0, 11, CONFIG.PIN_BASE_Z);
-  pinAreaLight.target.position.set(0, 0, CONFIG.PIN_BASE_Z);
-  pinAreaLight.castShadow = true;
-  scene.add(pinAreaLight);
-  scene.add(pinAreaLight.target);
-  
-  // Add general fill lighting for overall visibility
-  const fillLight1 = new THREE.PointLight(0xffffff, 1.5, 40);
-  fillLight1.position.set(-5, 8, 0);
-  scene.add(fillLight1);
-  
-  const fillLight2 = new THREE.PointLight(0xffffff, 1.5, 40);
-  fillLight2.position.set(5, 8, 0);
-  scene.add(fillLight2);
-  
-  const fillLight3 = new THREE.PointLight(0xffffff, 1.2, 35);
-  fillLight3.position.set(0, 8, -8);
-  scene.add(fillLight3);
-  
-  // Wall accent lighting - warm edge lighting
-  for (let side = -1; side <= 1; side += 2) {
-    for (let i = 0; i < 4; i++) {
-      const wallLight = new THREE.PointLight(0xff9944, 0.8, 12);
-      wallLight.position.set(side * 6, 4, -4 + (i * 4));
-      scene.add(wallLight);
-      
-      // Wall sconce fixtures
-      const sconceGeometry = new THREE.SphereGeometry(0.15, 12, 12);
-      const sconceMaterial = new THREE.MeshLambertMaterial({ 
-        color: 0x332211,
+      // Bright halo effect around bulb
+      const haloGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+      const haloMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xffffaa,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.3
       });
-      const sconce = new THREE.Mesh(sconceGeometry, sconceMaterial);
-      sconce.position.copy(wallLight.position);
-      scene.add(sconce);
+      const halo = new THREE.Mesh(haloGeometry, haloMaterial);
+      halo.position.set(side.x, 3.6, lampPos.z);
+      scene.add(halo);
+      
+      // Main light source (stronger)
+      const mainLight = new THREE.PointLight(0xffffcc, 3.0, 30);
+      mainLight.position.set(side.x, 3.6, lampPos.z);
+      mainLight.castShadow = true;
+      scene.add(mainLight);
+      
+      // Additional ambient light around the lamp
+      const ambientLight = new THREE.PointLight(0xffffcc, 1.0, 15);
+      ambientLight.position.set(side.x, 3.8, lampPos.z);
+      scene.add(ambientLight);
+      
+      // Ground illumination circle
+      const groundLightGeometry = new THREE.CircleGeometry(1.5, 16);
+      const groundLightMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xffffcc,
+        transparent: true,
+        opacity: 0.1
+      });
+      const groundLight = new THREE.Mesh(groundLightGeometry, groundLightMaterial);
+      groundLight.rotation.x = -Math.PI / 2;
+      groundLight.position.set(side.x, 0.01, lampPos.z);
+      scene.add(groundLight);
+      
+      lamps.push({ 
+        base,
+        post, 
+        shade, 
+        reflector,
+        bulb, 
+        halo,
+        mainLight,
+        ambientLight,
+        groundLight,
+        position: lampPos, 
+        side: side.name 
+      });
     }
   }
   
-  // Ceiling neon-style light strips - classic bowling alley look
-  const stripColors = [0x4488ff, 0xff4488, 0x44ff88]; // Blue, pink, green
-  for (let i = 0; i < 3; i++) {
-    const stripGeometry = new THREE.BoxGeometry(10, 0.05, 0.2);
-    const stripMaterial = new THREE.MeshBasicMaterial({ 
-      color: stripColors[i],
-      transparent: true,
-      opacity: 0.8
-    });
-    const lightStrip = new THREE.Mesh(stripGeometry, stripMaterial);
-    lightStrip.position.set(0, 10.5, -5 + (i * 5));
-    scene.add(lightStrip);
-    
-    // Soft glow from strips
-    const stripLight = new THREE.PointLight(stripColors[i], 0.4, 15);
-    stripLight.position.copy(lightStrip.position);
-    scene.add(stripLight);
-  }
-  
-  // Entrance/back area lighting
-  const entranceLight = new THREE.SpotLight(0xffaa44, 1.0, 20, Math.PI / 4, 0.3);
-  entranceLight.position.set(0, 8, 8);
-  entranceLight.target.position.set(0, 0, 5);
-  scene.add(entranceLight);
-  scene.add(entranceLight.target);
-  
-  // Under-lane accent lighting (like modern bowling alleys) - coordinated colors
-  const underLaneColors = [
-    0xff4444, // Red accent for lane 1
-    0x44ff44, // Green accent for lane 2
-    0x6644ff, // Purple accent for lane 3 (center)
-    0x4444ff, // Blue accent for lane 4
-    0xff6644  // Orange accent for lane 5
-  ];
-  
-  for (let i = 0; i < totalLanes; i++) {
-    // Calculate X position for each lane
-    const laneX = (i + 1 - Math.ceil(totalLanes / 2)) * laneSpacing;
-    
-    const underLight = new THREE.PointLight(underLaneColors[i], 0.3, 8);
-    underLight.position.set(laneX, 0.1, -3 + (i * 3.5));
-    scene.add(underLight);
-    
-    // Add visual circular glow effect on the lane surface
-    const glowGeometry = new THREE.RingGeometry(0.3, 0.5, 16);
-    const glowMaterial = new THREE.MeshBasicMaterial({ 
-      color: underLaneColors[i],
-      transparent: true,
-      opacity: 0.4,
-      side: THREE.DoubleSide
-    });
-    const glowRing = new THREE.Mesh(glowGeometry, glowMaterial);
-    glowRing.rotation.x = -Math.PI / 2;
-    glowRing.position.set(laneX, 0.02, 2); // Position on lane surface
-    scene.add(glowRing);
-  }
-  
-  return lights;
+  return lamps;
 };
 
-// Initialize bowling alley lighting
-const bowlingLights = createBowlingAlleyLights();
+// Initialize simple lane lighting
+const laneLamps = createSimpleLaneLamps();
 
 // ================= BOWLING CHARACTER ==============
 function createBowlingCharacter() {
@@ -358,154 +575,98 @@ function createBowlingCharacter() {
   
   const laneX = CONFIG.SELECTED_LANE_X || 0;
   
-  // Create character group for better organization
+  // Create character group
   const character = new THREE.Group();
   character.position.set(laneX, 0, CONFIG.BALL_SPAWN_Z - 1.5);
   
-  // === MAIN BODY (more organic shape) ===
+  // === BODY ===
   
-  // Torso - using sphere for more organic look, then scale it
-  const torsoGeometry = new THREE.SphereGeometry(0.2, 16, 16);
-  torsoGeometry.scale(1, 1.8, 0.8); // Make it taller and less wide
-  const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x2c5aa0 }); // Blue bowling shirt
+  // Main torso - simple cylinder with better proportions
+  const torsoGeometry = new THREE.CylinderGeometry(0.15, 0.18, 0.7, 12);
+  const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x2c5aa0 }); // Blue shirt
   const torso = new THREE.Mesh(torsoGeometry, torsoMaterial);
-  torso.position.set(0, 0.95, 0);
+  torso.position.set(0, 0.8, 0);
   character.add(torso);
   
-  // Head - slightly egg-shaped for more natural look
-  const headGeometry = new THREE.SphereGeometry(0.14, 20, 16);
-  headGeometry.scale(1, 1.1, 1); // Slightly taller
+  // Head - proper size and position
+  const headGeometry = new THREE.SphereGeometry(0.12, 16, 16);
   const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac }); // Skin tone
   const head = new THREE.Mesh(headGeometry, headMaterial);
-  head.position.set(0, 1.45, 0);
+  head.position.set(0, 1.27, 0);
   character.add(head);
   
-  // Eyes - positioned better
-  const eyeGeometry = new THREE.SphereGeometry(0.015, 8, 8);
+  // Simple eyes
+  const eyeGeometry = new THREE.SphereGeometry(0.01, 8, 8);
   const eyeMaterial = new THREE.MeshLambertMaterial({ color: 0x000000 });
   
   const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-  leftEye.position.set(-0.04, 1.48, 0.12);
+  leftEye.position.set(-0.03, 1.29, 0.1);
   character.add(leftEye);
   
   const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-  rightEye.position.set(0.04, 1.48, 0.12);
+  rightEye.position.set(0.03, 1.29, 0.1);
   character.add(rightEye);
   
-  // === ARMS (properly positioned at shoulder level) ===
+  // === ARMS (simplified and properly positioned) ===
   
-  // Upper arms - positioned at shoulder height
-  const upperArmGeometry = new THREE.CapsuleGeometry(0.03, 0.25, 4, 8); // More organic capsule shape
+  const armGeometry = new THREE.CylinderGeometry(0.025, 0.03, 0.45, 8);
   const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac }); // Skin tone
   
-  // Left upper arm
-  const leftUpperArm = new THREE.Mesh(upperArmGeometry, armMaterial);
-  leftUpperArm.position.set(-0.22, 1.25, 0); // At shoulder level
-  leftUpperArm.rotation.z = Math.PI / 6; // Natural downward angle
-  character.add(leftUpperArm);
+  // Left arm - positioned at shoulder
+  const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+  leftArm.position.set(-0.19, 1.0, 0);
+  leftArm.rotation.z = Math.PI / 8; // Slight outward angle
+  character.add(leftArm);
   
-  // Right upper arm
-  const rightUpperArm = new THREE.Mesh(upperArmGeometry, armMaterial);
-  rightUpperArm.position.set(0.22, 1.25, 0); // At shoulder level
-  rightUpperArm.rotation.z = -Math.PI / 6; // Natural downward angle
-  character.add(rightUpperArm);
+  // Right arm - positioned at shoulder
+  const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+  rightArm.position.set(0.19, 1.0, 0);
+  rightArm.rotation.z = -Math.PI / 8; // Slight outward angle
+  character.add(rightArm);
   
-  // Lower arms (forearms)
-  const forearmGeometry = new THREE.CapsuleGeometry(0.025, 0.22, 4, 8);
+  // === LEGS ===
   
-  // Left forearm
-  const leftForearm = new THREE.Mesh(forearmGeometry, armMaterial);
-  leftForearm.position.set(-0.32, 1.05, 0); // Connected to upper arm
-  leftForearm.rotation.z = Math.PI / 4; // Natural bend
-  character.add(leftForearm);
-  
-  // Right forearm
-  const rightForearm = new THREE.Mesh(forearmGeometry, armMaterial);
-  rightForearm.position.set(0.32, 1.05, 0); // Connected to upper arm
-  rightForearm.rotation.z = -Math.PI / 4; // Natural bend
-  character.add(rightForearm);
-  
-  // Hands
-  const handGeometry = new THREE.SphereGeometry(0.04, 12, 12);
-  handGeometry.scale(1, 1, 0.8); // Slightly flattened
-  
-  // Left hand
-  const leftHand = new THREE.Mesh(handGeometry, armMaterial);
-  leftHand.position.set(-0.38, 0.9, 0);
-  character.add(leftHand);
-  
-  // Right hand
-  const rightHand = new THREE.Mesh(handGeometry, armMaterial);
-  rightHand.position.set(0.38, 0.9, 0);
-  character.add(rightHand);
-  
-  // === LEGS (more natural positioning) ===
-  
-  // Upper legs (thighs) - capsule for more organic look
-  const thighGeometry = new THREE.CapsuleGeometry(0.055, 0.35, 4, 8);
+  const legGeometry = new THREE.CylinderGeometry(0.04, 0.05, 0.55, 8);
   const pantsMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 }); // Dark pants
   
-  // Left thigh
-  const leftThigh = new THREE.Mesh(thighGeometry, pantsMaterial);
-  leftThigh.position.set(-0.08, 0.55, 0); // Closer together, more natural
-  character.add(leftThigh);
+  // Left leg
+  const leftLeg = new THREE.Mesh(legGeometry, pantsMaterial);
+  leftLeg.position.set(-0.07, 0.2, 0);
+  character.add(leftLeg);
   
-  // Right thigh
-  const rightThigh = new THREE.Mesh(thighGeometry, pantsMaterial);
-  rightThigh.position.set(0.08, 0.55, 0); // Closer together, more natural
-  character.add(rightThigh);
+  // Right leg
+  const rightLeg = new THREE.Mesh(legGeometry, pantsMaterial);
+  rightLeg.position.set(0.07, 0.2, 0);
+  character.add(rightLeg);
   
-  // Lower legs (shins)
-  const shinGeometry = new THREE.CapsuleGeometry(0.045, 0.32, 4, 8);
+  // === FEET ===
   
-  // Left shin
-  const leftShin = new THREE.Mesh(shinGeometry, pantsMaterial);
-  leftShin.position.set(-0.08, 0.22, 0);
-  character.add(leftShin);
-  
-  // Right shin
-  const rightShin = new THREE.Mesh(shinGeometry, pantsMaterial);
-  rightShin.position.set(0.08, 0.22, 0);
-  character.add(rightShin);
-  
-  // === FEET (more shoe-like) ===
-  
-  const footGeometry = new THREE.BoxGeometry(0.1, 0.05, 0.2);
-  footGeometry.translate(0, 0, 0.04); // Move forward slightly for shoe look
-  const shoeMaterial = new THREE.MeshLambertMaterial({ color: 0x8b4513 }); // Brown shoes
+  const footGeometry = new THREE.BoxGeometry(0.08, 0.04, 0.15);
+  const shoeMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Brown shoes
   
   // Left foot
   const leftFoot = new THREE.Mesh(footGeometry, shoeMaterial);
-  leftFoot.position.set(-0.08, 0.03, 0);
+  leftFoot.position.set(-0.07, -0.08, 0.03);
   character.add(leftFoot);
   
   // Right foot
   const rightFoot = new THREE.Mesh(footGeometry, shoeMaterial);
-  rightFoot.position.set(0.08, 0.03, 0);
+  rightFoot.position.set(0.07, -0.08, 0.03);
   character.add(rightFoot);
   
-  // === CLOTHING DETAILS ===
+  // === SIMPLE DETAILS ===
   
-  // Collar area
-  const collarGeometry = new THREE.SphereGeometry(0.21, 16, 16);
-  collarGeometry.scale(1, 0.3, 0.8); // Flat collar shape
-  const collarMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff }); // White collar
-  const collar = new THREE.Mesh(collarGeometry, collarMaterial);
-  collar.position.set(0, 1.25, 0);
-  character.add(collar);
-  
-  // Simple belt line
-  const beltGeometry = new THREE.SphereGeometry(0.21, 16, 16);
-  beltGeometry.scale(1, 0.15, 0.85); // Thin belt
-  const beltMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Brown belt
-  const belt = new THREE.Mesh(beltGeometry, beltMaterial);
-  belt.position.set(0, 0.72, 0);
-  character.add(belt);
+  // White stripe on shirt
+  const stripeGeometry = new THREE.CylinderGeometry(0.16, 0.19, 0.08, 12);
+  const stripeMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
+  stripe.position.set(0, 0.85, 0);
+  character.add(stripe);
   
   scene.add(character);
   bowlingCharacter = character;
   
-  console.log(`✅ Natural-looking human character created at lane X: ${laneX}`);
+  console.log(`✅ Clean, simple character created at lane X: ${laneX}`);
 }
 
 function createCharacterBall() {
@@ -2129,14 +2290,6 @@ function animate(time) {
         ballInGutter = true;
         console.log(`🎳 Ball entered gutter at X=${ballX.toFixed(2)} (Lane boundaries: ${leftGutterBoundary.toFixed(2)} to ${rightGutterBoundary.toFixed(2)})`);
         showMessage('💀 GUTTER BALL!', 2000);
-        
-        // If no pins hit yet, immediately finish the roll with score 0
-        if (!ballHitPinsBeforeGutter) {
-          console.log('🚫 Gutter ball with no pins hit - ending roll immediately');
-          setTimeout(() => {
-            finishRoll();
-          }, 1000); // Small delay to show the gutter message
-        }
       }
     }
   }
