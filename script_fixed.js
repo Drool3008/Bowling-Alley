@@ -19,12 +19,507 @@ const CONFIG = {
 let selectedLane = 3; // Default to center lane (lane 3 of 5)
 let gameStarted = false;
 let justSelectedLane = false; // Flag to prevent immediate auto-throw
+let switchButtonClicked = false; // Flag to prevent global click interference
 const totalLanes = 5;
 const laneSpacing = 2.2;
 
 // Pin management for all lanes
 const decorativePinsByLane = new Map(); // Store decorative pins for inactive lanes
 let currentPhysicsLane = 3; // Track which lane has physics pins
+
+// Individual lane state storage
+const laneGameStates = new Map();
+
+// Initialize game states for all lanes (1-5)
+function initializeLaneStates() {
+  for (let i = 1; i <= totalLanes; i++) {
+    laneGameStates.set(i, {
+      gameState: 'READY',
+      frames: [],
+      frameIndex: 0,
+      rollIndex: 0,
+      pinsStandingAtStart: 0,
+      waitingForSettle: false,
+      hasPlayed: false // Track if this lane has been used
+    });
+    
+    // Initialize frames for each lane
+    const frames = [];
+    for (let f = 0; f < 10; f++) {
+      frames.push({ rolls: [] });
+    }
+    laneGameStates.get(i).frames = frames;
+  }
+}
+
+// Initialize lane states
+initializeLaneStates();
+
+// Lane switching control functions
+function canSwitchLanes() {
+  console.log(`🔍 Checking lane switch availability: gameState=${gameState}, frameIndex=${frameIndex}, rollIndex=${rollIndex}`);
+  
+  // Cannot switch if ball is in motion
+  if (gameState === 'ROLLING' || gameState === 'SETTLING') {
+    console.log('❌ Cannot switch: Ball is in motion');
+    return {
+      allowed: false,
+      reason: 'Cannot switch lanes while ball is in motion. Wait for ball to stop.'
+    };
+  }
+  
+  // Check if we're in the middle of a frame (roll 2)
+  if (rollIndex === 1) {
+    console.log('❌ Cannot switch: In middle of frame (roll 2)');
+    return {
+      allowed: false,
+      reason: 'Cannot switch lanes during roll 2. Complete the frame first.'
+    };
+  }
+  
+  // Can switch during roll 1 of any frame (including first roll)
+  if (rollIndex === 0) {
+    console.log('✅ Can switch: Roll 1 of frame');
+    return {
+      allowed: true,
+      reason: 'Lane switching available before first roll of frame.'
+    };
+  }
+  
+  console.log('✅ Can switch: General availability');
+  return {
+    allowed: true,
+    reason: 'Lane switching available.'
+  };
+}
+
+function saveCurrentLaneState() {
+  const currentState = laneGameStates.get(selectedLane);
+  currentState.gameState = gameState;
+  currentState.frames = JSON.parse(JSON.stringify(frames)); // Deep copy
+  currentState.frameIndex = frameIndex;
+  currentState.rollIndex = rollIndex;
+  currentState.pinsStandingAtStart = pinsStandingAtStart;
+  currentState.waitingForSettle = waitingForSettle;
+  currentState.hasPlayed = true;
+  
+  // Calculate current score for debugging
+  const frameScores = calculateFrameScores(frames);
+  const totalScore = frameScores.reduce((sum, score) => sum + score, 0);
+  
+  console.log(`💾 Saved state for Lane ${selectedLane}:`, {
+    frame: frameIndex + 1,
+    roll: rollIndex + 1,
+    gameState: gameState,
+    totalScore: totalScore,
+    frames: frames.map(f => f.rolls)
+  });
+}
+
+function loadLaneState(laneNumber) {
+  const laneState = laneGameStates.get(laneNumber);
+  
+  gameState = laneState.gameState;
+  frames = JSON.parse(JSON.stringify(laneState.frames)); // Deep copy
+  frameIndex = laneState.frameIndex;
+  rollIndex = laneState.rollIndex;
+  pinsStandingAtStart = laneState.pinsStandingAtStart;
+  waitingForSettle = laneState.waitingForSettle;
+  
+  // Ensure clean state when resuming
+  if (laneState.hasPlayed) {
+    gameState = 'READY'; // Always set to READY when resuming
+    waitingForSettle = false;
+  }
+  
+  console.log(`📂 Loaded state for Lane ${laneNumber}:`, {
+    frame: frameIndex + 1,
+    roll: rollIndex + 1,
+    gameState: gameState,
+    hasPlayed: laneState.hasPlayed
+  });
+}
+
+function switchToLane(newLaneNumber) {
+  const switchCheck = canSwitchLanes();
+  if (!switchCheck.allowed) {
+    alert(switchCheck.reason);
+    return false;
+  }
+  
+  console.log(`🔄 Switching from Lane ${selectedLane} to Lane ${newLaneNumber}`);
+  
+  // Save current lane state
+  saveCurrentLaneState();
+  
+  // Switch to new lane
+  const oldLane = selectedLane;
+  selectedLane = newLaneNumber;
+  
+  // Load new lane state
+  loadLaneState(newLaneNumber);
+  
+  // Handle pin switching
+  switchPhysicsPinsToLane(newLaneNumber);
+  
+  // Force physics world step to settle any lingering physics
+  world.step(CONFIG.PHYS_STEP);
+  
+  // Update camera and CONFIG
+  const selectedLaneX = (selectedLane - Math.ceil(totalLanes / 2)) * laneSpacing;
+  CONFIG.SELECTED_LANE_X = selectedLaneX;
+  camera.position.set(selectedLaneX, 3.8, -8);
+  camera.lookAt(selectedLaneX, 1, CONFIG.PIN_BASE_Z);
+  
+  // Refresh game display
+  setupPins();
+  createBall();
+  
+  // Reset game state to ensure clean transition
+  gameState = 'READY';
+  waitingForSettle = false;
+  powerCharging = false;
+  currentPower = 0;
+  
+  // Reset any UI elements
+  const powerBarElement = document.getElementById('powerBar');
+  if (powerBarElement) {
+    powerBarElement.style.display = 'none';
+  }
+  const powerFillElement = document.getElementById('powerFill');
+  if (powerFillElement) {
+    powerFillElement.style.width = '0%';
+  }
+  
+  updateUI();
+  updateLaneSwitchButton();
+  
+  // Show success message
+  const laneState = laneGameStates.get(newLaneNumber);
+  const frameInfo = `Frame ${frameIndex + 1}, Roll ${rollIndex + 1}`;
+  const statusInfo = laneState.hasPlayed ? 'Resuming game' : 'Starting new game';
+  showMessage(`🎳 Switched to Lane ${newLaneNumber} | ${frameInfo} | ${statusInfo}`, 3000);
+  
+  return true;
+}
+
+// Add lane switching button to the UI
+function addLaneSwitchingButton() {
+  const existingButton = document.getElementById('switchLaneButton');
+  if (existingButton) return; // Already exists
+  
+  const switchButton = document.createElement('button');
+  switchButton.id = 'switchLaneButton';
+  switchButton.textContent = 'Switch Lane';
+  switchButton.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+  `;
+  
+  switchButton.addEventListener('click', (event) => {
+    console.log('🖱️ Switch Lane button clicked!');
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    
+    // Set flag to prevent global click handler
+    switchButtonClicked = true;
+    setTimeout(() => { switchButtonClicked = false; }, 100);
+    
+    const switchCheck = canSwitchLanes();
+    console.log(`Switch check result:`, switchCheck);
+    
+    if (!switchCheck.allowed) {
+      console.log('❌ Switch not allowed, showing alert');
+      alert(switchCheck.reason);
+      switchButtonClicked = false; // Reset flag
+      return;
+    }
+    console.log('✅ Switch allowed, creating modal');
+    
+    // Use setTimeout to ensure the flag is set before any other handlers run
+    setTimeout(() => {
+      createLaneSwitchingModal();
+      switchButtonClicked = false; // Reset flag after modal is created
+    }, 10);
+  });
+  
+  switchButton.addEventListener('mouseenter', () => {
+    if (!switchButton.disabled) {
+      switchButton.style.transform = 'scale(1.05)';
+      switchButton.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4)';
+    }
+  });
+  
+  switchButton.addEventListener('mouseleave', () => {
+    switchButton.style.transform = 'scale(1)';
+    switchButton.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3)';
+  });
+  
+  document.body.appendChild(switchButton);
+}
+
+function updateLaneSwitchButton() {
+  const switchButton = document.getElementById('switchLaneButton');
+  if (!switchButton) {
+    console.log('⚠️ Switch button not found');
+    return;
+  }
+  
+  const switchCheck = canSwitchLanes();
+  console.log(`🔄 Updating switch button: ${switchCheck.allowed ? 'ENABLED' : 'DISABLED'} - ${switchCheck.reason}`);
+  
+  if (switchCheck.allowed) {
+    switchButton.disabled = false;
+    switchButton.textContent = 'Switch Lane';
+    switchButton.style.background = 'linear-gradient(90deg, #60a5fa 0%, #2563eb 100%)';
+    switchButton.style.opacity = '1';
+    switchButton.style.cursor = 'pointer';
+    switchButton.title = 'Click to switch to another lane';
+  } else {
+    switchButton.disabled = true;
+    switchButton.textContent = 'Complete Roll';
+    switchButton.style.background = 'linear-gradient(90deg, #ef4444 0%, #dc2626 100%)';
+    switchButton.style.opacity = '0.7';
+    switchButton.style.cursor = 'not-allowed';
+    switchButton.title = switchCheck.reason;
+  }
+}
+
+// Create lane switching modal
+function createLaneSwitchingModal() {
+  console.log('🎯 Creating lane switching modal...');
+  
+  // IMPORTANT: Save current lane state before showing modal
+  saveCurrentLaneState();
+  
+  // Remove existing modal if any
+  const existingModal = document.getElementById('laneSwitchModal');
+  if (existingModal) {
+    console.log('🗑️ Removing existing modal');
+    document.body.removeChild(existingModal);
+  }
+  
+  // Create modal overlay
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'laneSwitchModal';
+  modalOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+  `;
+  
+  console.log('✅ Modal overlay created successfully');
+  
+  // Create modal content
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    border: 3px solid #60a5fa;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    max-width: 900px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  `;
+  
+  // Title
+  const title = document.createElement('h1');
+  title.textContent = 'Switch Lane';
+  title.style.cssText = `
+    color: #60a5fa;
+    margin-bottom: 10px;
+    font-size: 2.5em;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+  `;
+  
+  // Current lane info
+  const currentInfo = document.createElement('p');
+  
+  // Calculate current score properly
+  let currentScore = 0;
+  if (frames && frames.length > 0) {
+    const frameScores = calculateFrameScores(frames);
+    currentScore = frameScores.reduce((sum, score) => sum + score, 0);
+  }
+  
+  currentInfo.innerHTML = `
+    <strong>Currently on Lane ${selectedLane}</strong><br>
+    Frame ${frameIndex + 1}, Roll ${rollIndex + 1} | Score: ${currentScore}
+  `;
+  currentInfo.style.cssText = `
+    color: #94a3b8;
+    margin-bottom: 25px;
+    font-size: 1.3em;
+    line-height: 1.5;
+  `;
+  
+  // Instruction
+  const instruction = document.createElement('p');
+  instruction.textContent = 'Select a lane to switch to:';
+  instruction.style.cssText = `
+    color: #cbd5e1;
+    margin-bottom: 30px;
+    font-size: 1.1em;
+  `;
+  
+  modalContent.appendChild(title);
+  modalContent.appendChild(currentInfo);
+  modalContent.appendChild(instruction);
+  
+  // Lane buttons container
+  const buttonsContainer = document.createElement('div');
+  buttonsContainer.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  `;
+  
+  // Create lane buttons
+  for (let i = 1; i <= 5; i++) {
+    const laneState = laneGameStates.get(i);
+    
+    // Calculate the total score for this lane (cumulative)
+    let laneScore = 0;
+    if (laneState.frames && laneState.frames.length > 0) {
+      const frameScores = calculateFrameScores(laneState.frames);
+      laneScore = frameScores.reduce((sum, score) => sum + score, 0);
+    }
+    
+    const isCurrentLane = i === selectedLane;
+    
+    const laneButton = document.createElement('button');
+    
+    // Determine lane status
+    let statusIcon, statusText, statusColor, frameInfo;
+    if (isCurrentLane) {
+      statusIcon = '🎯';
+      statusText = 'Current Lane';
+      statusColor = '#10b981';
+      frameInfo = `F${frameIndex + 1}R${rollIndex + 1}`;
+    } else if (laneState.hasPlayed) {
+      statusIcon = '🎳';
+      statusText = 'Resume Game';
+      statusColor = '#f59e0b';
+      frameInfo = `F${laneState.frameIndex + 1}R${laneState.rollIndex + 1}`;
+    } else {
+      statusIcon = '🆕';
+      statusText = 'Start New';
+      statusColor = '#3b82f6';
+      frameInfo = 'F1R1';
+    }
+    
+    laneButton.innerHTML = `
+      <div style="font-size: 1.5em; margin-bottom: 8px;">${statusIcon}</div>
+      <div style="font-size: 1.3em; font-weight: bold; margin-bottom: 5px;">Lane ${i}</div>
+      <div style="font-size: 0.9em; opacity: 0.9; margin-bottom: 5px;">${frameInfo} | Score: ${laneScore}</div>
+      <div style="font-size: 0.8em; color: ${statusColor}; font-weight: bold;">${statusText}</div>
+    `;
+    
+    laneButton.style.cssText = `
+      padding: 20px 15px;
+      border: 2px solid ${statusColor};
+      border-radius: 15px;
+      cursor: ${isCurrentLane ? 'default' : 'pointer'};
+      font-family: inherit;
+      transition: all 0.3s ease;
+      background: ${isCurrentLane ? 
+        'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.2) 100%)' :
+        'linear-gradient(135deg, rgba(96, 165, 250, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%)'
+      };
+      color: white;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      opacity: ${isCurrentLane ? '0.7' : '1'};
+    `;
+    
+    if (!isCurrentLane) {
+      laneButton.addEventListener('mouseenter', () => {
+        laneButton.style.transform = 'scale(1.02)';
+        laneButton.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.3)';
+        laneButton.style.background = 'linear-gradient(135deg, rgba(96, 165, 250, 0.2) 0%, rgba(37, 99, 235, 0.2) 100%)';
+      });
+      
+      laneButton.addEventListener('mouseleave', () => {
+        laneButton.style.transform = 'scale(1)';
+        laneButton.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.2)';
+        laneButton.style.background = 'linear-gradient(135deg, rgba(96, 165, 250, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%)';
+      });
+      
+      laneButton.addEventListener('click', () => {
+        console.log(`🎯 Attempting to switch to Lane ${i}`);
+        switchToLane(i);
+        document.body.removeChild(modalOverlay);
+      });
+    }
+    
+    buttonsContainer.appendChild(laneButton);
+  }
+  
+  modalContent.appendChild(buttonsContainer);
+  
+  // Cancel button
+  const cancelButton = document.createElement('button');
+  cancelButton.textContent = 'Cancel';
+  cancelButton.style.cssText = `
+    padding: 15px 30px;
+    background: linear-gradient(90deg, #6b7280 0%, #4b5563 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.1em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  `;
+  
+  cancelButton.addEventListener('click', () => {
+    document.body.removeChild(modalOverlay);
+  });
+  
+  cancelButton.addEventListener('mouseenter', () => {
+    cancelButton.style.background = 'linear-gradient(90deg, #4b5563 0%, #374151 100%)';
+  });
+  
+  cancelButton.addEventListener('mouseleave', () => {
+    cancelButton.style.background = 'linear-gradient(90deg, #6b7280 0%, #4b5563 100%)';
+  });
+  
+  modalContent.appendChild(cancelButton);
+  modalOverlay.appendChild(modalContent);
+  document.body.appendChild(modalOverlay);
+  
+  console.log('🎯 Modal successfully added to DOM');
+  
+  // Close modal when clicking outside
+  modalOverlay.addEventListener('click', (e) => {
+    if (e.target === modalOverlay) {
+      document.body.removeChild(modalOverlay);
+    }
+  });
+}
 
 // ================= SCENE / RENDERER ==============
 const container = document.getElementById('container');
@@ -312,6 +807,7 @@ function startGameWithSelectedLane() {
   setTimeout(() => {
     justSelectedLane = false;
     console.log('✅ Ready for player input');
+    updateLaneSwitchButton(); // Update button after setup
   }, 500);
 }
 
@@ -325,6 +821,56 @@ function initializeGameOnLane(laneX) {
   
   // Start the game
   init();
+}
+
+// Add lane switching button to the UI
+function addLaneSwitchButton() {
+  const existingButton = document.getElementById('switchLaneButton');
+  if (existingButton) return; // Already exists
+  
+  const switchButton = document.createElement('button');
+  switchButton.id = 'switchLaneButton';
+  switchButton.textContent = 'Switch Lane';
+  switchButton.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 25px;
+    background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1000;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+  `;
+  
+  switchButton.addEventListener('click', () => {
+    createLaneSelectionModal();
+  });
+  
+  switchButton.addEventListener('mouseenter', () => {
+    if (!switchButton.disabled) {
+      switchButton.style.transform = 'scale(1.05)';
+      switchButton.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.4)';
+    }
+  });
+  
+  switchButton.addEventListener('mouseleave', () => {
+    switchButton.style.transform = 'scale(1)';
+    switchButton.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.3)';
+  });
+  
+  document.body.appendChild(switchButton);
+}
+
+// Update the switch button whenever game state changes
+function updateGameStateAndButton(newGameState) {
+  gameState = newGameState;
+  updateLaneSwitchButton();
 }
 
 // ================= PIN MANAGEMENT FUNCTIONS ==============
@@ -452,9 +998,9 @@ const createMultipleLanes = () => {
     const laneNumber = i + 1; // Lanes numbered 1-5
     const isActiveLane = laneNumber === selectedLane; // Use selectedLane instead of fixed center
     
-    // Lane surface - brighter for active lane
+    // Lane surface - same light brown color for all lanes
     const laneGeometry = new THREE.PlaneGeometry(laneWidth, laneLength);
-    const laneColor = isActiveLane ? 0x8B4513 : 0x654321; // Brighter brown for active lane
+    const laneColor = 0x8B4513; // Light brown for all lanes
     const laneMaterial = new THREE.MeshLambertMaterial({ color: laneColor });
     const lane = new THREE.Mesh(laneGeometry, laneMaterial);
     lane.rotation.x = -Math.PI / 2;
@@ -482,6 +1028,14 @@ const createMultipleLanes = () => {
     foulLine.rotation.x = -Math.PI / 2;
     foulLine.position.set(laneX, 0.01, CONFIG.FOUL_LINE_Z);
     scene.add(foulLine);
+    
+    // Green starting position ring for each lane
+    const ringGeometry = new THREE.RingGeometry(CONFIG.BALL_R + 0.02, CONFIG.BALL_R + 0.05, 16);
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+    const startingRing = new THREE.Mesh(ringGeometry, ringMaterial);
+    startingRing.position.set(laneX, 0.01, CONFIG.BALL_SPAWN_Z);
+    startingRing.rotation.x = -Math.PI / 2;
+    scene.add(startingRing);
     
     // Add decorative pins for non-active lanes
     if (!isActiveLane) {
@@ -582,14 +1136,6 @@ groundMesh.rotation.x = -Math.PI / 2;
 groundMesh.receiveShadow = true;
 scene.add(groundMesh);
 
-// Green starting position ring
-const ringGeometry = new THREE.RingGeometry(CONFIG.BALL_R + 0.02, CONFIG.BALL_R + 0.05, 16);
-const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
-const startingRing = new THREE.Mesh(ringGeometry, ringMaterial);
-startingRing.position.set(0, 0.01, CONFIG.BALL_SPAWN_Z);
-startingRing.rotation.x = -Math.PI / 2;
-scene.add(startingRing);
-
 // ================= GAME STATE ==============
 let ball = null;
 let pins = [];
@@ -645,6 +1191,16 @@ function createPin(x, z) {
 function createBall() {
   console.log('🎾 Creating new ball');
   
+  // Clean up any existing ball first
+  if (ball) {
+    console.log('🧹 Cleaning up existing ball before creating new one');
+    scene.remove(ball.mesh);
+    world.removeBody(ball.body);
+    if (ball.mesh.geometry) ball.mesh.geometry.dispose();
+    if (ball.mesh.material) ball.mesh.material.dispose();
+    ball = null;
+  }
+  
   // Get selected lane X position
   const laneX = CONFIG.SELECTED_LANE_X || 0;
   
@@ -658,6 +1214,11 @@ function createBall() {
   body.position.set(laneX, CONFIG.BALL_R + 0.02, CONFIG.BALL_SPAWN_Z);
   body.velocity.set(0, 0, 0);
   body.angularVelocity.set(0, 0, 0);
+  
+  // Ensure the body is completely at rest
+  body.sleep();
+  body.wakeUp();
+  
   world.addBody(body);
   
   // Visual
@@ -668,6 +1229,17 @@ function createBall() {
   scene.add(mesh);
   
   ball = { body, mesh, thrown: false };
+  
+  // Add extra safety checks for physics state
+  setTimeout(() => {
+    if (ball && ball.body) {
+      ball.body.velocity.set(0, 0, 0);
+      ball.body.angularVelocity.set(0, 0, 0);
+      ball.body.position.set(laneX, CONFIG.BALL_R + 0.02, CONFIG.BALL_SPAWN_Z);
+      console.log(`🔒 Ball physics state locked for Lane ${selectedLane}`);
+    }
+  }, 50);
+  
   console.log(`✅ Ball created on Lane ${selectedLane} at position x=${laneX}`);
 }
 
@@ -771,6 +1343,7 @@ function resetBallForNewRoll() {
   createBall();
   gameState = 'READY';
   waitingForSettle = false;
+  updateLaneSwitchButton(); // Update switch button availability
   
   // Reset power bar
   powerCharging = false;
@@ -960,11 +1533,15 @@ function setupNextRoll(scored) {
       rollIndex = 0;
       console.log(`🔄 Advanced to frame ${frameIndex + 1}`);
       setupPins();
+      updateLaneSwitchButton();
+      updateLaneSwitchButton(); // Update switch button (now available)
     } else if (rollCount === 1) {
       // Second roll
       console.log('➡️ Second roll');
       rollIndex = 1;
       removeKnockedPins();
+      updateLaneSwitchButton();
+      updateLaneSwitchButton(); // Update switch button (now blocked)
     } else {
       // Frame complete
       console.log('✅ Frame complete');
@@ -972,6 +1549,8 @@ function setupNextRoll(scored) {
       rollIndex = 0;
       console.log(`🔄 Advanced to frame ${frameIndex + 1}`);
       setupPins();
+      updateLaneSwitchButton();
+      updateLaneSwitchButton(); // Update switch button (now available)
     }
   } else {
     // 10th frame
@@ -1019,6 +1598,7 @@ function setupNextRoll(scored) {
   
   resetBallForNewRoll();
   updateUI();
+  updateLaneSwitchButton(); // Update switch button availability
 }
 
 function calculateFrameScores(frames) {
@@ -1258,6 +1838,16 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
+  // Don't start power charging if clicking on UI buttons
+  if (switchButtonClicked || 
+      e.target.tagName === 'BUTTON' || 
+      e.target.closest('button') || 
+      e.target.id === 'switchLaneButton' ||
+      e.target.closest('#switchLaneButton')) {
+    console.log('🚫 Mousedown on button detected, not starting power charge');
+    return;
+  }
+  
   console.log(`🎯 MOUSEDOWN - gameState: ${gameState}, ball: ${!!ball}, ball.thrown: ${ball?.thrown}, powerCharging: ${powerCharging}, justSelectedLane: ${justSelectedLane}`);
   
   if (gameState === 'READY' && ball && !ball.thrown && !powerCharging && !justSelectedLane) {
@@ -1277,6 +1867,16 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
+  // Don't throw ball if clicking on UI buttons
+  if (switchButtonClicked || 
+      e.target.tagName === 'BUTTON' || 
+      e.target.closest('button') || 
+      e.target.id === 'switchLaneButton' ||
+      e.target.closest('#switchLaneButton')) {
+    console.log('🚫 Mouseup on button detected, not throwing ball');
+    return;
+  }
+  
   if (gameState === 'READY' && ball && !ball.thrown && powerCharging) {
     console.log(`🎯 THROWING BALL - Power: ${(currentPower * 100).toFixed(1)}%, Angle: ${aimAngle.toFixed(2)}`);
     
@@ -1300,6 +1900,7 @@ window.addEventListener('mouseup', (e) => {
     gameState = 'ROLLING';
     waitingForSettle = true;
     powerCharging = false;
+    updateLaneSwitchButton(); // Disable switching while ball is rolling
     
     // Hide power bar
     const powerBarElement = document.getElementById('powerBar');
@@ -1311,7 +1912,22 @@ window.addEventListener('mouseup', (e) => {
   }
 });
 
-window.addEventListener('click', () => {
+window.addEventListener('click', (event) => {
+  // Don't trigger ball throw if switch button was just clicked
+  if (switchButtonClicked) {
+    console.log('🚫 Switch button click detected, not throwing ball');
+    return;
+  }
+  
+  // Don't trigger ball throw if clicking on UI buttons
+  if (event.target.tagName === 'BUTTON' || 
+      event.target.closest('button') || 
+      event.target.id === 'switchLaneButton' ||
+      event.target.closest('#switchLaneButton')) {
+    console.log('🚫 Click on button detected, not throwing ball');
+    return;
+  }
+  
   // This is kept for fallback, but mousedown/mouseup handle the main interaction
   if (gameState === 'READY' && ball && !ball.thrown && !powerCharging && !justSelectedLane) {
     // Quick throw with random power if click without holding
@@ -1326,6 +1942,7 @@ window.addEventListener('click', () => {
     
     gameState = 'ROLLING';
     waitingForSettle = true;
+    updateLaneSwitchButton();
     
     console.log(`Quick throw - power ${power.toFixed(1)}, compensated angle ${compensatedAngle.toFixed(2)}`);
   }
@@ -1438,14 +2055,16 @@ function animate(time) {
 
 // ================= INITIALIZATION ==============
 function init() {
-  console.log('🎳 INITIALIZING BOWLING GAME');
+  console.log(`🎳 INITIALIZING BOWLING GAME FOR LANE ${selectedLane}`);
   
   setupPins();
   createBall();
   updateUI();
+  addLaneSwitchingButton();
+  updateLaneSwitchButton();
   
   // Test message system immediately
-  showMessage('🎳 Game Ready! Roll to see strike/spare messages!', 5000);
+  showMessage(`🎳 Lane ${selectedLane} Ready! Frame ${frameIndex + 1}, Roll ${rollIndex + 1}`, 5000);
   
   // Add reset button functionality
   const resetBtn = document.getElementById('resetGameBtn');
