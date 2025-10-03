@@ -23,6 +23,12 @@ let switchButtonClicked = false; // Flag to prevent global click interference
 const totalLanes = 5;
 const laneSpacing = 2.2;
 
+// ================= BOWLING CHARACTER ==============
+let bowlingCharacter = null;
+let characterAnimationState = 'IDLE'; // IDLE, CHARGING, THROWING, FOLLOW_THROUGH
+let throwAnimationProgress = 0;
+let characterBall = null; // Ball that the character holds during charging
+
 // Pin management for all lanes
 const decorativePinsByLane = new Map(); // Store decorative pins for inactive lanes
 let currentPhysicsLane = 3; // Track which lane has physics pins
@@ -170,6 +176,9 @@ function switchToLane(newLaneNumber) {
   CONFIG.SELECTED_LANE_X = selectedLaneX;
   camera.position.set(selectedLaneX, 3.8, -8);
   camera.lookAt(selectedLaneX, 1, CONFIG.PIN_BASE_Z);
+  
+  // Update character position for new lane
+  updateCharacterForLane(newLaneNumber);
   
   // Refresh game display
   setupPins();
@@ -873,6 +882,340 @@ function updateGameStateAndButton(newGameState) {
   updateLaneSwitchButton();
 }
 
+// ================= BOWLING CHARACTER FUNCTIONS ==============
+function createBowlingCharacter() {
+  console.log('🏃 Creating bowling character');
+  
+  const laneX = CONFIG.SELECTED_LANE_X || 0;
+  
+  // Create character group
+  const characterGroup = new THREE.Group();
+  
+  // === TORSO (more realistic rectangular shape) ===
+  const torsoGeometry = new THREE.BoxGeometry(0.35, 0.6, 0.2);
+  const torsoMaterial = new THREE.MeshLambertMaterial({ color: 0x2c3e50 }); // Dark blue bowling shirt
+  const torso = new THREE.Mesh(torsoGeometry, torsoMaterial);
+  torso.position.y = 1.0;
+  characterGroup.add(torso);
+  
+  // === HEAD (more detailed) ===
+  const headGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+  const headMaterial = new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }); // Skin color
+  const head = new THREE.Mesh(headGeometry, headMaterial);
+  head.position.y = 1.45;
+  characterGroup.add(head);
+  
+  // === HAIR ===
+  const hairGeometry = new THREE.SphereGeometry(0.16, 16, 16);
+  const hairMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown hair
+  const hair = new THREE.Mesh(hairGeometry, hairMaterial);
+  hair.position.y = 1.52;
+  hair.scale.set(1, 0.8, 1); // Flatten slightly
+  characterGroup.add(hair);
+  
+  // === ARMS (hierarchical structure with proper connections) ===
+  const armMaterial = new THREE.MeshLambertMaterial({ color: 0xfdbcb4 }); // Skin color
+  
+  // Left arm system
+  const leftArmGroup = new THREE.Group();
+  
+  // Left upper arm
+  const leftUpperArmGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 8);
+  const leftUpperArm = new THREE.Mesh(leftUpperArmGeometry, armMaterial);
+  leftUpperArm.position.set(0, -0.175, 0); // Position relative to shoulder
+  leftArmGroup.add(leftUpperArm);
+  
+  // Left forearm (child of upper arm)
+  const leftForearmGroup = new THREE.Group();
+  const leftForearmGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8);
+  const leftForearm = new THREE.Mesh(leftForearmGeometry, armMaterial);
+  leftForearm.position.set(0, -0.15, 0); // Position relative to elbow
+  leftForearmGroup.add(leftForearm);
+  
+  // Left hand (child of forearm)
+  const leftHandGeometry = new THREE.SphereGeometry(0.04, 8, 8);
+  const leftHand = new THREE.Mesh(leftHandGeometry, armMaterial);
+  leftHand.position.set(0, -0.18, 0); // Position at end of forearm (outward)
+  leftForearmGroup.add(leftHand);
+  
+  leftForearmGroup.position.set(0, -0.35, 0); // Position forearm group at elbow
+  leftArmGroup.add(leftForearmGroup);
+  
+  leftArmGroup.position.set(-0.25, 1.15, 0); // Position arm group at shoulder
+  leftArmGroup.rotation.z = Math.PI / 6; // More outward angle
+  characterGroup.add(leftArmGroup);
+  
+  // Right arm system (throwing arm)
+  const rightArmGroup = new THREE.Group();
+  
+  // Right upper arm
+  const rightUpperArmGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 8);
+  const rightUpperArm = new THREE.Mesh(rightUpperArmGeometry, armMaterial);
+  rightUpperArm.position.set(0, -0.175, 0); // Position relative to shoulder
+  rightArmGroup.add(rightUpperArm);
+  
+  // Right forearm (child of upper arm)
+  const rightForearmGroup = new THREE.Group();
+  const rightForearmGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8);
+  const rightForearm = new THREE.Mesh(rightForearmGeometry, armMaterial);
+  rightForearm.position.set(0, -0.15, 0); // Position relative to elbow
+  rightForearmGroup.add(rightForearm);
+  
+  // Right hand (child of forearm)
+  const rightHandGeometry = new THREE.SphereGeometry(0.04, 8, 8);
+  const rightHand = new THREE.Mesh(rightHandGeometry, armMaterial);
+  rightHand.position.set(0, -0.18, 0); // Position at end of forearm (outward)
+  rightForearmGroup.add(rightHand);
+  
+  rightForearmGroup.position.set(0, -0.35, 0); // Position forearm group at elbow
+  rightArmGroup.add(rightForearmGroup);
+  
+  rightArmGroup.position.set(0.25, 1.15, 0); // Position arm group at shoulder
+  rightArmGroup.rotation.z = -Math.PI / 6; // More outward angle
+  characterGroup.add(rightArmGroup);
+  
+  // === LEGS (more realistic with thighs and shins) ===
+  const legMaterial = new THREE.MeshLambertMaterial({ color: 0x34495e }); // Darker blue pants
+  
+  // Left thigh
+  const leftThighGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 8);
+  const leftThigh = new THREE.Mesh(leftThighGeometry, legMaterial);
+  leftThigh.position.set(-0.12, 0.5, 0);
+  characterGroup.add(leftThigh);
+  
+  // Left shin
+  const leftShinGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 8);
+  const leftShin = new THREE.Mesh(leftShinGeometry, legMaterial);
+  leftShin.position.set(-0.12, 0.15, 0);
+  characterGroup.add(leftShin);
+  
+  // Right thigh
+  const rightThighGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 8);
+  const rightThigh = new THREE.Mesh(rightThighGeometry, legMaterial);
+  rightThigh.position.set(0.12, 0.5, 0);
+  characterGroup.add(rightThigh);
+  
+  // Right shin
+  const rightShinGeometry = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 8);
+  const rightShin = new THREE.Mesh(rightShinGeometry, legMaterial);
+  rightShin.position.set(0.12, 0.15, 0);
+  characterGroup.add(rightShin);
+  
+  // === FEET (bowling shoes) ===
+  const footGeometry = new THREE.BoxGeometry(0.12, 0.06, 0.25);
+  const footMaterial = new THREE.MeshLambertMaterial({ color: 0x1a1a1a }); // Black bowling shoes
+  
+  const leftFoot = new THREE.Mesh(footGeometry, footMaterial);
+  leftFoot.position.set(-0.12, 0.03, 0.05);
+  characterGroup.add(leftFoot);
+  
+  const rightFoot = new THREE.Mesh(footGeometry, footMaterial);
+  rightFoot.position.set(0.12, 0.03, 0.05);
+  characterGroup.add(rightFoot);
+  
+  // === CLOTHING DETAILS ===
+  // Bowling shirt collar
+  const collarGeometry = new THREE.TorusGeometry(0.18, 0.02, 8, 16);
+  const collarMaterial = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); // Red collar
+  const collar = new THREE.Mesh(collarGeometry, collarMaterial);
+  collar.position.y = 1.25;
+  collar.rotation.x = Math.PI / 2;
+  characterGroup.add(collar);
+  
+  // Bowling shirt stripes
+  for (let i = 0; i < 3; i++) {
+    const stripeGeometry = new THREE.BoxGeometry(0.36, 0.03, 0.21);
+    const stripeMaterial = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); // Red stripes
+    const stripe = new THREE.Mesh(stripeGeometry, stripeMaterial);
+    stripe.position.set(0, 1.0 - (i * 0.15), 0.01);
+    characterGroup.add(stripe);
+  }
+  
+  // Position character at throwing line
+  characterGroup.position.set(laneX, 0, CONFIG.BALL_SPAWN_Z - 0.5);
+  characterGroup.rotation.y = 0; // Facing down the lane
+  
+  scene.add(characterGroup);
+  
+  bowlingCharacter = {
+    group: characterGroup,
+    torso: torso,
+    head: head,
+    hair: hair,
+    leftArmGroup: leftArmGroup,
+    leftUpperArm: leftUpperArm,
+    leftForearmGroup: leftForearmGroup,
+    leftForearm: leftForearm,
+    leftHand: leftHand,
+    rightArmGroup: rightArmGroup,
+    rightUpperArm: rightUpperArm,
+    rightForearmGroup: rightForearmGroup,
+    rightForearm: rightForearm,
+    rightHand: rightHand,
+    leftThigh: leftThigh,
+    leftShin: leftShin,
+    rightThigh: rightThigh,
+    rightShin: rightShin,
+    leftFoot: leftFoot,
+    rightFoot: rightFoot
+  };
+  
+  console.log(`✅ Realistic bowling character created at lane ${selectedLane}`);
+}
+
+function createCharacterBall() {
+  if (characterBall) {
+    scene.remove(characterBall);
+    characterBall.geometry.dispose();
+    characterBall.material.dispose();
+  }
+  
+  const ballGeometry = new THREE.SphereGeometry(CONFIG.BALL_R * 0.8, 12, 12);
+  const ballMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+  characterBall = new THREE.Mesh(ballGeometry, ballMaterial);
+  
+  scene.add(characterBall);
+  return characterBall;
+}
+
+function updateCharacterAnimation() {
+  if (!bowlingCharacter) return;
+  
+  const laneX = CONFIG.SELECTED_LANE_X || 0;
+  
+  // Update character position for current lane
+  bowlingCharacter.group.position.x = laneX;
+  
+  switch (characterAnimationState) {
+    case 'IDLE':
+      // Neutral standing position with arms at sides
+      bowlingCharacter.rightArmGroup.rotation.x = 0;
+      bowlingCharacter.rightForearmGroup.rotation.x = 0;
+      bowlingCharacter.rightArmGroup.rotation.z = -Math.PI / 6; // Natural outward position
+      bowlingCharacter.leftArmGroup.rotation.z = Math.PI / 6; // Natural outward position
+      bowlingCharacter.torso.rotation.x = 0;
+      
+      // Reset leg positions
+      bowlingCharacter.leftThigh.rotation.x = 0;
+      bowlingCharacter.rightThigh.rotation.x = 0;
+      
+      // Hide character ball
+      if (characterBall) {
+        characterBall.visible = false;
+      }
+      break;
+      
+    case 'CHARGING':
+      // Bowling stance - arm back with ball
+      const chargeAngle = -Math.PI / 4 - (currentPower * Math.PI / 3); // Swing back more as power increases
+      const leanAngle = Math.sin(currentPower * Math.PI) * 0.15; // Body lean
+      
+      // Arm positioning (shoulder rotation)
+      bowlingCharacter.rightArmGroup.rotation.x = chargeAngle;
+      bowlingCharacter.rightForearmGroup.rotation.x = chargeAngle * 0.3; // Slight forearm bend
+      
+      // Body lean forward slightly
+      bowlingCharacter.torso.rotation.x = leanAngle;
+      
+      // Leg positioning for bowling stance
+      bowlingCharacter.leftThigh.rotation.x = Math.PI / 12; // Left leg forward
+      bowlingCharacter.rightThigh.rotation.x = -Math.PI / 12; // Right leg back
+      
+      // Show and position ball in right hand
+      if (characterBall) {
+        characterBall.visible = true;
+        
+        // Get world position of right hand
+        const handWorldPos = new THREE.Vector3();
+        bowlingCharacter.rightHand.getWorldPosition(handWorldPos);
+        
+        // Position ball at hand location
+        characterBall.position.copy(handWorldPos);
+        characterBall.position.y += 0.05; // Slight offset above hand
+      }
+      break;
+      
+    case 'THROWING':
+      // Forward swing motion
+      const throwProgress = throwAnimationProgress;
+      const throwAngle = -Math.PI / 4 - (Math.PI / 3) + (throwProgress * Math.PI * 3/4); // Swing from back to forward
+      
+      // Arm animation
+      bowlingCharacter.rightArmGroup.rotation.x = throwAngle;
+      bowlingCharacter.rightForearmGroup.rotation.x = throwAngle * 0.4;
+      
+      // Body follow-through
+      bowlingCharacter.torso.rotation.x = Math.sin(throwProgress * Math.PI) * 0.3;
+      
+      // Leg movement for follow-through
+      bowlingCharacter.leftThigh.rotation.x = Math.PI / 8 * throwProgress;
+      bowlingCharacter.rightThigh.rotation.x = -Math.PI / 8 * throwProgress;
+      
+      // Ball follows hand until release point
+      if (characterBall && throwProgress < 0.6) {
+        characterBall.visible = true;
+        
+        // Get world position of right hand
+        const handWorldPos = new THREE.Vector3();
+        bowlingCharacter.rightHand.getWorldPosition(handWorldPos);
+        
+        // Position ball at hand location
+        characterBall.position.copy(handWorldPos);
+        characterBall.position.y += 0.05;
+      } else if (characterBall) {
+        // Hide character ball after release
+        characterBall.visible = false;
+      }
+      
+      // Update animation progress
+      throwAnimationProgress += 0.04; // Slightly slower for more realistic motion
+      
+      if (throwAnimationProgress >= 1.0) {
+        characterAnimationState = 'FOLLOW_THROUGH';
+        throwAnimationProgress = 0;
+      }
+      break;
+      
+    case 'FOLLOW_THROUGH':
+      // Follow through position
+      bowlingCharacter.rightArmGroup.rotation.x = Math.PI / 3;
+      bowlingCharacter.rightForearmGroup.rotation.x = Math.PI / 6;
+      bowlingCharacter.torso.rotation.x = 0.2;
+      
+      // Extended leg position
+      bowlingCharacter.leftThigh.rotation.x = Math.PI / 6;
+      bowlingCharacter.rightThigh.rotation.x = -Math.PI / 8;
+      
+      if (characterBall) {
+        characterBall.visible = false;
+      }
+      
+      // Return to idle after follow through
+      throwAnimationProgress += 0.015; // Slower return
+      if (throwAnimationProgress >= 1.0) {
+        characterAnimationState = 'IDLE';
+        throwAnimationProgress = 0;
+      }
+      break;
+  }
+}
+
+function startCharacterThrowAnimation() {
+  if (bowlingCharacter) {
+    characterAnimationState = 'THROWING';
+    throwAnimationProgress = 0;
+    console.log('🎳 Character throw animation started');
+  }
+}
+
+function updateCharacterForLane(laneNumber) {
+  if (bowlingCharacter) {
+    const laneX = (laneNumber - Math.ceil(totalLanes / 2)) * laneSpacing;
+    bowlingCharacter.group.position.x = laneX;
+    console.log(`🏃 Character moved to lane ${laneNumber}`);
+  }
+}
+
 // ================= PIN MANAGEMENT FUNCTIONS ==============
 // Remove decorative pins from a specific lane
 function removeDecorativePinsFromLane(laneNumber) {
@@ -1230,6 +1573,11 @@ function createBall() {
   
   ball = { body, mesh, thrown: false };
   
+  // Hide the physics ball initially - character will show ball during charging
+  if (mesh) {
+    mesh.visible = false;
+  }
+  
   // Add extra safety checks for physics state
   setTimeout(() => {
     if (ball && ball.body) {
@@ -1348,6 +1696,11 @@ function resetBallForNewRoll() {
   // Reset power bar
   powerCharging = false;
   currentPower = 0;
+  
+  // Reset character animation
+  characterAnimationState = 'IDLE';
+  throwAnimationProgress = 0;
+  
   const powerBarElement = document.getElementById('powerBar');
   if (powerBarElement) {
     powerBarElement.style.display = 'none';
@@ -1856,6 +2209,12 @@ window.addEventListener('mousedown', (e) => {
     currentPower = 0;
     powerDirection = 1;
     
+    // Start character charging animation
+    characterAnimationState = 'CHARGING';
+    if (!characterBall) {
+      createCharacterBall();
+    }
+    
     // Show power bar
     const powerBarElement = document.getElementById('powerBar');
     if (powerBarElement) {
@@ -1880,6 +2239,9 @@ window.addEventListener('mouseup', (e) => {
   if (gameState === 'READY' && ball && !ball.thrown && powerCharging) {
     console.log(`🎯 THROWING BALL - Power: ${(currentPower * 100).toFixed(1)}%, Angle: ${aimAngle.toFixed(2)}`);
     
+    // Start character throw animation
+    startCharacterThrowAnimation();
+    
     // Calculate throw parameters with corrected physics
     const power = CONFIG.BALL_MIN_SPEED + (currentPower * (CONFIG.BALL_MAX_SPEED - CONFIG.BALL_MIN_SPEED));
     
@@ -1891,10 +2253,21 @@ window.addEventListener('mouseup', (e) => {
     console.log(`Original angle: ${aimAngle.toFixed(2)}, Compensated: ${compensatedAngle.toFixed(2)}`);
     console.log(`Calculated velocities: vx=${vx.toFixed(2)}, vz=${vz.toFixed(2)}`);
     
-    // Throw ball
-    ball.body.velocity.set(vx, 0, vz);
-    ball.body.angularVelocity.set(0, 0, -power * 2);
-    ball.thrown = true;
+    // Show the physics ball and apply physics after character animation delay
+    setTimeout(() => {
+      if (ball && ball.mesh) {
+        ball.mesh.visible = true;
+      }
+      
+      // Throw ball
+      ball.body.velocity.set(vx, 0, vz);
+      ball.body.angularVelocity.set(0, 0, -power * 2);
+      ball.thrown = true;
+      
+      gameState = 'ROLLING';
+      waitingForSettle = true;
+      updateLaneSwitchButton(); // Disable switching while ball is rolling
+    }, 350); // Delay to match character animation
     
     // Update game state
     gameState = 'ROLLING';
@@ -2019,6 +2392,9 @@ function animate(time) {
   // Update power bar
   updatePowerBar(dt);
   
+  // Update character animation
+  updateCharacterAnimation();
+  
   // Update visuals
   if (ball) {
     ball.mesh.position.copy(ball.body.position);
@@ -2059,6 +2435,8 @@ function init() {
   
   setupPins();
   createBall();
+  createBowlingCharacter();
+  createCharacterBall();
   updateUI();
   addLaneSwitchingButton();
   updateLaneSwitchButton();
