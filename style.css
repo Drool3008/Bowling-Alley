@@ -162,6 +162,7 @@ input[type="checkbox"] {
   box-shadow: 0 2px 12px #2563eb55;
   overflow: hidden;
   z-index: 2;
+  display: none; /* Initially hidden */
 }
 #powerFill {
   height: 100%;
