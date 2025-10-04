@@ -1351,18 +1351,21 @@ function switchToLane(newLaneNumber) {
   // Update UI to reflect new lane state
   updateUI();
   
-  // Reset power charging state
-  powerCharging = false;
-  currentPower = 0;
-  
-  // Reset any UI elements
-  const powerBarElement = document.getElementById('powerBar');
-  if (powerBarElement) {
-    powerBarElement.style.display = 'none';
+  // Reset power charging state only if not currently charging
+  if (!powerCharging) {
+    currentPower = 0;
   }
-  const powerFillElement = document.getElementById('powerFill');
-  if (powerFillElement) {
-    powerFillElement.style.width = '0%';
+  
+  // Reset any UI elements only if not actively charging power
+  if (!powerCharging) {
+    const powerBarElement = document.getElementById('powerBar');
+    if (powerBarElement) {
+      powerBarElement.style.display = 'none';
+    }
+    const powerFillElement = document.getElementById('powerFill');
+    if (powerFillElement) {
+      powerFillElement.style.width = '0%';
+    }
   }
   
   updateUI();
@@ -1391,6 +1394,9 @@ let aimAngle = 0;
 let powerCharging = false;
 let currentPower = 0;
 let powerDirection = 1;
+let lastPowerPercent = -1; // Track last percentage to prevent unnecessary updates
+let blockMessageUpdates = false; // Prevent any message conflicts
+let powerMessageInterval = null; // Controlled message updates
 const POWER_SPEED = 2.0; // Power increase/decrease speed
 
 // Initialize frames (will be overridden by lane state loading)
@@ -1720,18 +1726,24 @@ function updatePowerBar(dt) {
       powerDirection = 1;
     }
     
-    // Update visual power bar
+    // Update visual power bar and ensure it's visible
+    const powerBarElement = document.getElementById('powerBar');
+    if (powerBarElement) {
+      powerBarElement.style.display = 'block';
+    }
+    
     const powerFillElement = document.getElementById('powerFill');
     if (powerFillElement) {
       powerFillElement.style.width = (currentPower * 100) + '%';
     }
     
-    // Update message with power level
-    const messageElement = document.getElementById('message');
-    if (messageElement) {
-      const powerPercent = Math.round(currentPower * 100);
-      messageElement.textContent = `CHARGING POWER: ${powerPercent}% | Release to throw!`;
-      messageElement.style.color = currentPower > 0.8 ? '#ff4444' : currentPower > 0.5 ? '#ffaa00' : '#00ff88';
+    // REMOVE message updates from here to prevent flickering
+    // Message will be updated only when power charging starts and via interval
+  } else {
+    // Ensure power bar is hidden when not charging
+    const powerBarElement = document.getElementById('powerBar');
+    if (powerBarElement && powerBarElement.style.display !== 'none') {
+      powerBarElement.style.display = 'none';
     }
   }
 }
@@ -1952,7 +1964,11 @@ function updateUI() {
   }
   
   if (messageElement) {
-    messageElement.textContent = `State: ${gameState} | Score: ${totalScore}`;
+    // Only update message if not currently showing power charging info or aiming info
+    if (!powerCharging && !messageElement.textContent.includes('CHARGING POWER') && !messageElement.textContent.includes('Aim:')) {
+      messageElement.textContent = `State: ${gameState} | Score: ${totalScore}`;
+      messageElement.style.color = ''; // Reset color
+    }
   }
   
   // Create scoreboard with 2 rows of 5 frames each to fit screen
@@ -2067,33 +2083,35 @@ function checkSettlement() {
 window.addEventListener('mousemove', (e) => {
   if (gameState === 'READY') {
     const t = e.clientX / innerWidth;
-    // Simple direct aiming - no offsets, just raw mouse position
-    aimAngle = (t - 0.5) * 1.2; // Increased range for better control
+    aimAngle = (t - 0.5) * 1.2; // Update aim angle always
     
     // Visual feedback for aiming - rotate ball
     if (ball && ball.mesh) {
       ball.mesh.rotation.y = aimAngle * 2;
     }
     
-    // Update message to show aiming
-    const messageElement = document.getElementById('message');
-    if (messageElement && !powerCharging) {
-      let aimDirection;
-      let aimColor;
-      
-      if (aimAngle > 0.1) {
-        aimDirection = `RIGHT (${(aimAngle * 50).toFixed(0)}°)`;
-        aimColor = '#ff8888';
-      } else if (aimAngle < -0.1) {
-        aimDirection = `LEFT (${(-aimAngle * 50).toFixed(0)}°)`;
-        aimColor = '#88ff88';
-      } else {
-        aimDirection = 'CENTER (0°)';
-        aimColor = '#88ffff';
+    // ONLY update message if not power charging and message updates are not blocked
+    if (!powerCharging && !blockMessageUpdates) {
+      const messageElement = document.getElementById('message');
+      if (messageElement) {
+        let aimDirection;
+        let aimColor;
+        
+        if (aimAngle > 0.1) {
+          aimDirection = `RIGHT (${(aimAngle * 50).toFixed(0)}°)`;
+          aimColor = '#ff8888';
+        } else if (aimAngle < -0.1) {
+          aimDirection = `LEFT (${(-aimAngle * 50).toFixed(0)}°)`;
+          aimColor = '#88ff88';
+        } else {
+          aimDirection = 'CENTER (0°)';
+          aimColor = '#88ffff';
+        }
+        
+        const aimMessage = `Aim: ${aimDirection} | Hold mouse to charge power`;
+        messageElement.textContent = aimMessage;
+        messageElement.style.color = aimColor;
       }
-      
-      messageElement.textContent = `Aim: ${aimDirection} | Hold mouse to charge power`;
-      messageElement.style.color = aimColor;
     }
   }
 });
@@ -2109,12 +2127,29 @@ window.addEventListener('mousedown', (e) => {
     powerCharging = true;
     currentPower = 0;
     powerDirection = 1;
+    blockMessageUpdates = true;
     
     // Show power bar
     const powerBarElement = document.getElementById('powerBar');
     if (powerBarElement) {
       powerBarElement.style.display = 'block';
     }
+    
+    // Start controlled message updates at 10fps instead of 60fps
+    powerMessageInterval = setInterval(() => {
+      if (powerCharging) {
+        const messageElement = document.getElementById('message');
+        if (messageElement) {
+          const powerPercent = Math.round(currentPower * 100);
+          if (powerPercent !== lastPowerPercent) {
+            lastPowerPercent = powerPercent;
+            const newMessage = `CHARGING POWER: ${powerPercent}% | Release to throw!`;
+            messageElement.textContent = newMessage;
+            messageElement.style.color = currentPower > 0.8 ? '#ff4444' : currentPower > 0.5 ? '#ffaa00' : '#00ff88';
+          }
+        }
+      }
+    }, 100); // Update every 100ms (10fps) instead of every frame
   }
 });
 
@@ -2124,6 +2159,15 @@ window.addEventListener('mouseup', (e) => {
     // Still need to stop power charging if it was started
     if (powerCharging) {
       powerCharging = false;
+      lastPowerPercent = -1; // Reset power percentage tracker
+      blockMessageUpdates = false; // Re-enable message updates
+      
+      // Clear the power message interval
+      if (powerMessageInterval) {
+        clearInterval(powerMessageInterval);
+        powerMessageInterval = null;
+      }
+      
       const powerBarElement = document.getElementById('powerBar');
       if (powerBarElement) {
         powerBarElement.style.display = 'none';
@@ -2135,12 +2179,23 @@ window.addEventListener('mouseup', (e) => {
   if (gameState === 'READY' && ball && !ball.thrown && powerCharging) {
     console.log(`🎯 THROWING BALL - Power: ${(currentPower * 100).toFixed(1)}%, Angle: ${aimAngle.toFixed(2)}`);
     
-    // Calculate throw parameters with balanced compensation
+    // Calculate throw parameters with enhanced left compensation
     const power = CONFIG.BALL_MIN_SPEED + (currentPower * (CONFIG.BALL_MAX_SPEED - CONFIG.BALL_MIN_SPEED));
     
-    // Add left offset since ball still goes right - need more leftward compensation
-    const compensatedAngle = aimAngle - 0.45; // Increased compensation (about 26 degrees left)
-    const vx = compensatedAngle * power * 0.4;
+    // Enhanced compensation - more aggressive for left aiming
+    let compensatedAngle = aimAngle;
+    if (aimAngle < 0) {
+      // When aiming left, apply stronger compensation
+      compensatedAngle = aimAngle * 1.5 - 0.4; // Amplify left aiming and add base offset
+    } else if (aimAngle > 0) {
+      // When aiming right, apply lighter compensation so ball actually goes right
+      compensatedAngle = aimAngle * 0.8 - 0.38; // Reduce right compensation, left bias
+    } else {
+      // When aiming center, apply slight left bias
+      compensatedAngle = -0.1; // Slight left bias for center aim
+    }
+    
+    const vx = compensatedAngle * power * 0.5; // Increased multiplier for more sensitivity
     const vz = power;
     
     console.log(`Original angle: ${aimAngle.toFixed(2)}, Compensated: ${compensatedAngle.toFixed(2)}`);
@@ -2155,6 +2210,14 @@ window.addEventListener('mouseup', (e) => {
     gameState = 'ROLLING';
     waitingForSettle = true;
     powerCharging = false;
+    lastPowerPercent = -1; // Reset power percentage tracker
+    blockMessageUpdates = false; // Re-enable message updates
+    
+    // Clear the power message interval
+    if (powerMessageInterval) {
+      clearInterval(powerMessageInterval);
+      powerMessageInterval = null;
+    }
     
     // Hide power bar
     const powerBarElement = document.getElementById('powerBar');
